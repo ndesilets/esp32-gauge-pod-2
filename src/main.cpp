@@ -1,21 +1,18 @@
+#include <Arduino.h>
+
+#include <ESP32-TWAI-CAN.hpp>
+
 #define CAN_RX_PIN 4
 #define CAN_TX_PIN 5
-
 #define DEBUG_RX_PIN 11
 #define DEBUG_TX_PIN 10
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#include <Arduino.h>
-
-#include <ESP32-TWAI-CAN.hpp>
-
 enum { CH_CLOSED, CH_OPEN, CH_LISTEN } chState;
 bool timestampEnabled = false;
 
 HardwareSerial debugSerial(1);
-char chRxBuffer[32] = {0};
-char chTxBuffer[32] = {0};
 
 static unsigned long timeElapsed = 0;
 static unsigned long lastSent = 0;
@@ -26,11 +23,8 @@ void encodeCanFrame(const CanFrame& frame, char* buffer, size_t bufferSize,
   int offset = 0;
 
   // set frame type and identifier
-  if (frame.extd) {
-    offset += snprintf(buffer, bufferSize, "T%08X", frame.identifier);
-  } else {
-    offset += snprintf(buffer, bufferSize, "t%03X", frame.identifier);
-  }
+  offset += snprintf(buffer, bufferSize, frame.extd ? "T%08X" : "t%03X",
+                     frame.identifier);
 
   // set data length code
   offset += snprintf(buffer + offset, bufferSize - offset, "%1X",
@@ -57,23 +51,23 @@ void encodeCanFrame(const CanFrame& frame, char* buffer, size_t bufferSize,
 
 // assumes that sender implements SLCAN correctly, if not well fuck me
 void decodeCanFrame(const char* buffer, CanFrame& frame) {
-  int consumed = 0;
+  int n = 0;
 
   // decode frame type and identifier
   frame.extd = buffer[0] == 'T';
   int offset = 1;  // skip type
   sscanf(buffer + offset, frame.extd ? "%08X%n" : "%03X%n", &frame.identifier,
-         &consumed);
-  offset += consumed;
+         &n);
+  offset += n;
 
   // get data length code
-  sscanf(buffer + offset, "%1X%n", &frame.data_length_code, &consumed);
-  offset += consumed;
+  sscanf(buffer + offset, "%1X%n", &frame.data_length_code, &n);
+  offset += n;
 
   // get data bytes
   for (int i = 0; i < MIN(frame.data_length_code, 8); i++) {
-    sscanf(buffer + offset, "%02X%n", &frame.data[i], &consumed);
-    offset += consumed;
+    sscanf(buffer + offset, "%02X%n", &frame.data[i], &n);
+    offset += n;
   }
 
   // ignore timestamp, remote frames for now
@@ -82,7 +76,6 @@ void decodeCanFrame(const char* buffer, CanFrame& frame) {
 void setup() {
   Serial.begin(115200);
   debugSerial.begin(115200, SERIAL_8N1, DEBUG_RX_PIN, DEBUG_TX_PIN);
-  debugSerial.println("hello mfer");
 
   ESP32Can.setPins(CAN_TX_PIN, CAN_RX_PIN);
   ESP32Can.setSpeed(TWAI_SPEED_500KBPS);
@@ -91,12 +84,12 @@ void setup() {
 
 void loop() {
   timeElapsed = millis();
+  char chRxBuffer[64] = {0};
   CanFrame chFrame{};
 
   if (Serial.available()) {
-    // TODO move global buffers out to here
     int bytesRead = Serial.readBytesUntil('\r', chRxBuffer, sizeof(chRxBuffer));
-    chRxBuffer[bytesRead] = '\0';
+    chRxBuffer[MIN(bytesRead, sizeof(chRxBuffer) - 1)] = '\0';
     debugSerial.println(chRxBuffer);
 
     switch (chRxBuffer[0]) {
@@ -137,8 +130,6 @@ void loop() {
       case 'T':
       case 't':
         decodeCanFrame(chRxBuffer, chFrame);
-        debugSerial.printf("Frame to send: ID %03X DLC %d\n",
-                           chFrame.identifier, chFrame.data_length_code);
         break;
       default:
         // it is a mystery
@@ -151,6 +142,11 @@ void loop() {
    * if CANHacker frame is set then send the frame to ECU
    * then read can frame from ECU and forward to CANHacker
    */
+
+  if (chState == CH_OPEN && chFrame.identifier != 0) {
+    debugSerial.printf("Frame to send: ID %03X DLC %d\n", chFrame.identifier,
+                       chFrame.data_length_code);
+  }
 
   if (chState == CH_OPEN && (timeElapsed - lastSent) > 1000) {
     CanFrame test{};
@@ -167,6 +163,7 @@ void loop() {
     test.extd = false;
     test.rtr = false;
 
+    char chTxBuffer[64] = {0};
     encodeCanFrame(test, chTxBuffer, sizeof(chTxBuffer), timestampEnabled);
     Serial.write(chTxBuffer);
 
