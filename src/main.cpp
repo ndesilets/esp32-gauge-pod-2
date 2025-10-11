@@ -78,14 +78,14 @@ void setup() {
   debugSerial.begin(115200, SERIAL_8N1, DEBUG_RX_PIN, DEBUG_TX_PIN);
 
   ESP32Can.setPins(CAN_TX_PIN, CAN_RX_PIN);
-  ESP32Can.setSpeed(TWAI_SPEED_500KBPS);
-  ESP32Can.begin();
 }
 
 void loop() {
   timeElapsed = millis();
   char chRxBuffer[64] = {0};
   CanFrame chFrame{};
+
+  // handle SLCAN command
 
   if (Serial.available()) {
     int bytesRead = Serial.readBytesUntil('\r', chRxBuffer, sizeof(chRxBuffer));
@@ -110,8 +110,43 @@ void loop() {
         timestampEnabled = chRxBuffer[1] == '1';
         Serial.write('\r');
         break;
-      case 'S':  // set bit rate
-        // don't care, it's gonna be 500kb for me
+      case 'S':
+        switch (chRxBuffer[1]) {
+          case '0':
+            ESP32Can.setSpeed(TWAI_SPEED_10KBPS);
+            break;
+          case '1':
+            ESP32Can.setSpeed(TWAI_SPEED_20KBPS);
+            break;
+          case '2':
+            // ESP32-TWAI-CAN doesn't have 50kbps
+            Serial.write('\a');
+            return;
+          case '3':
+            ESP32Can.setSpeed(TWAI_SPEED_100KBPS);
+            break;
+          case '4':
+            ESP32Can.setSpeed(TWAI_SPEED_125KBPS);
+            break;
+          case '5':
+            ESP32Can.setSpeed(TWAI_SPEED_250KBPS);
+            break;
+          case '6':
+            ESP32Can.setSpeed(TWAI_SPEED_500KBPS);
+            break;
+          case '7':
+            ESP32Can.setSpeed(TWAI_SPEED_800KBPS);
+            break;
+          case '8':
+            ESP32Can.setSpeed(TWAI_SPEED_1000KBPS);
+            break;
+          default:
+            // unsupported speed
+            Serial.write('\a');
+            return;
+        }
+
+        ESP32Can.begin();
         Serial.write('\r');
         break;
       case 'M':  // set acceptance mask
@@ -130,6 +165,9 @@ void loop() {
       case 'T':
       case 't':
         decodeCanFrame(chRxBuffer, chFrame);
+        debugSerial.printf("Frame to send: ID %03X DLC %d\n",
+                           chFrame.identifier, chFrame.data_length_code);
+        // TODO send over canbus to ECU
         break;
       default:
         // it is a mystery
@@ -138,15 +176,15 @@ void loop() {
     }
   }
 
-  /*
-   * if CANHacker frame is set then send the frame to ECU
-   * then read can frame from ECU and forward to CANHacker
-   */
+  // handle CAN from ECU
 
-  if (chState == CH_OPEN && chFrame.identifier != 0) {
-    debugSerial.printf("Frame to send: ID %03X DLC %d\n", chFrame.identifier,
-                       chFrame.data_length_code);
-  }
+  char chTxBuffer[64] = {0};
+
+  // CanFrame ecuFrame{};
+  // if (chState == CH_OPEN && ESP32Can.readFrame(&ecuFrame)) {
+  //   encodeCanFrame(ecuFrame, chTxBuffer, sizeof(chTxBuffer),
+  //   timestampEnabled); Serial.write(chTxBuffer);
+  // }
 
   if (chState == CH_OPEN && (timeElapsed - lastSent) > 1000) {
     CanFrame test{};
@@ -163,7 +201,6 @@ void loop() {
     test.extd = false;
     test.rtr = false;
 
-    char chTxBuffer[64] = {0};
     encodeCanFrame(test, chTxBuffer, sizeof(chTxBuffer), timestampEnabled);
     Serial.write(chTxBuffer);
 
