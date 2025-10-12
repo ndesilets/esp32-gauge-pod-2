@@ -79,6 +79,7 @@ void setup() {
   Serial.begin(115200);
 #ifdef ENABLE_DEBUG_SERIAL
   debugSerial.begin(115200, SERIAL_8N1, DEBUG_RX_PIN, DEBUG_TX_PIN);
+  debugSerial.println("hello");
 #endif
 
   ESP32Can.setPins(CAN_TX_PIN, CAN_RX_PIN);
