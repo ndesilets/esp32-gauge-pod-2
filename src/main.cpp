@@ -12,7 +12,9 @@
 enum { CH_CLOSED, CH_OPEN, CH_LISTEN } chState;
 bool timestampEnabled = false;
 
+#ifdef ENABLE_DEBUG_SERIAL
 HardwareSerial debugSerial(1);
+#endif
 
 static unsigned long timeElapsed = 0;
 static unsigned long lastSent = 0;
@@ -75,7 +77,9 @@ void decodeCanFrame(const char* buffer, CanFrame& frame) {
 
 void setup() {
   Serial.begin(115200);
+#ifdef ENABLE_DEBUG_SERIAL
   debugSerial.begin(115200, SERIAL_8N1, DEBUG_RX_PIN, DEBUG_TX_PIN);
+#endif
 
   ESP32Can.setPins(CAN_TX_PIN, CAN_RX_PIN);
 }
@@ -85,12 +89,14 @@ void loop() {
   char chRxBuffer[64] = {0};
   CanFrame chFrame{};
 
-  // handle SLCAN command
+  // handle SLCAN commands
 
   if (Serial.available()) {
     int bytesRead = Serial.readBytesUntil('\r', chRxBuffer, sizeof(chRxBuffer));
     chRxBuffer[MIN(bytesRead, sizeof(chRxBuffer) - 1)] = '\0';
+#ifdef ENABLE_DEBUG_SERIAL
     debugSerial.println(chRxBuffer);
+#endif
 
     switch (chRxBuffer[0]) {
       case 'C':
@@ -165,8 +171,10 @@ void loop() {
       case 'T':
       case 't':
         decodeCanFrame(chRxBuffer, chFrame);
+#ifdef ENABLE_DEBUG_SERIAL
         debugSerial.printf("Frame to send: ID %03X DLC %d\n",
                            chFrame.identifier, chFrame.data_length_code);
+#endif
         // TODO send over canbus to ECU
         break;
       default:
@@ -176,18 +184,12 @@ void loop() {
     }
   }
 
-  // handle CAN from ECU
-
-  char chTxBuffer[64] = {0};
-
-  // CanFrame ecuFrame{};
-  // if (chState == CH_OPEN && ESP32Can.readFrame(&ecuFrame)) {
-  //   encodeCanFrame(ecuFrame, chTxBuffer, sizeof(chTxBuffer),
-  //   timestampEnabled); Serial.write(chTxBuffer);
-  // }
+#ifdef SEND_TEST_MESSAGE_ONLY
 
   if (chState == CH_OPEN && (timeElapsed - lastSent) > 1000) {
+    char chTxBuffer[64] = {0};
     CanFrame test{};
+
     test.identifier = 0x123;
     test.data_length_code = 8;
     test.data[0] = 0x11;
@@ -206,4 +208,21 @@ void loop() {
 
     lastSent = timeElapsed;
   }
+
+#else
+
+  // handle CAN to/from ECU
+
+  if (chState == CH_OPEN && chFrame.identifier != 0) {
+    ESP32Can.writeFrame(&chFrame);
+  }
+
+  CanFrame ecuFrame{};
+  if (chState == CH_OPEN && ESP32Can.readFrame(&ecuFrame)) {
+    char chTxBuffer[64] = {0};
+    encodeCanFrame(ecuFrame, chTxBuffer, sizeof(chTxBuffer), timestampEnabled);
+    Serial.write(chTxBuffer);
+  }
+
+#endif
 }
