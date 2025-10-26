@@ -176,7 +176,9 @@ void loop() {
         debugSerial.printf("Frame to send: ID %03X DLC %d\n",
                            chFrame.identifier, chFrame.data_length_code);
 #endif
-        // TODO send over canbus to ECU
+        if (chState == CH_OPEN && chFrame.identifier != 0) {
+          ESP32Can.writeFrame(&chFrame);
+        }
         break;
       default:
         // it is a mystery
@@ -212,11 +214,7 @@ void loop() {
 
 #else
 
-  // handle CAN to/from ECU
-
-  if (chState == CH_OPEN && chFrame.identifier != 0) {
-    ESP32Can.writeFrame(&chFrame);
-  }
+  // handle messages from ECU
 
   CanFrame ecuFrame{};
   if (chState == CH_OPEN && ESP32Can.readFrame(&ecuFrame)) {
