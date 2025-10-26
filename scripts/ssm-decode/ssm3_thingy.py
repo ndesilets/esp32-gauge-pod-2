@@ -16,20 +16,19 @@ unconfirmed:
 class CANHackerMsg(TypedDict):
     timestamp: float
     can_id: int
-    data_bytes: list[int]
+    payload: list[int]
 
 # includes assembled ISO-TP messages
 class ProcessedMsg(TypedDict):
     timestamp: float # of first frame
     can_id: int
-    data_bytes: list[int]
+    payload: list[int]
 
 class BufferedProcessedMsg(TypedDict):
     timestamp: float # of first frame
     last_seq: int
     length: int
-    data_bytes: list[int]
-
+    payload: list[int]
 
 
 def parse_canhacker_trc(file_path: str) -> Iterator[CANHackerMsg]:
@@ -45,15 +44,16 @@ def parse_canhacker_trc(file_path: str) -> Iterator[CANHackerMsg]:
             yield CANHackerMsg({
                 "timestamp": float(split[0]),
                 "can_id": int(split[1], 16),
-                "data_bytes": [int(byte, 16) for byte in split[3:]]
+                "payload": [int(byte, 16) for byte in split[3:]] # skips data length byte
             })
 
 
+#  handle iso-tp messages and emit assembled messages stripped of iso-tp headers
 def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[ProcessedMsg]:
     buffer: Dict[int, BufferedProcessedMsg] = {}
 
     for raw_message in raw_messages:
-        pci_byte = raw_message["data_bytes"][0]
+        pci_byte = raw_message["payload"][0]
         pci_high = (pci_byte & 0xF0) >> 4
         pci_low = pci_byte & 0x0F
 
@@ -62,19 +62,18 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                 yield ProcessedMsg({
                     "timestamp": raw_message["timestamp"],
                     "can_id": raw_message["can_id"],
-                    "data_bytes": raw_message["data_bytes"][1:],
+                    "payload": raw_message["payload"][1:],
                 })
             case 0x1: # first frame
-                # pci_low = upper 4 bits of total length, length_byte = lower 8 bits of total length
                 upper_len_bits = pci_low 
-                lower_len_bits = raw_message["data_bytes"][1]
-                msg_length = (upper_len_bits << 8) | lower_len_bits
+                lower_len_bits = raw_message["payload"][1]
+                data_length = (upper_len_bits << 8) | lower_len_bits
 
                 buffer[raw_message["can_id"]] = BufferedProcessedMsg({
                     "timestamp": raw_message["timestamp"],  
                     "last_seq": 0,
-                    "length": msg_length,
-                    "data_bytes": raw_message["data_bytes"][2:],
+                    "length": data_length,
+                    "payload": raw_message["payload"][2:],
                 })
             case 0x2: # consecutive frame
                 sequence_num = pci_low
@@ -82,13 +81,13 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                 # TODO: check if id is even in the buffer
 
                 buffered_msg = buffer[raw_message["can_id"]]
-                buffered_msg["data_bytes"].extend(raw_message["data_bytes"][1:])
+                buffered_msg["payload"].extend(raw_message["payload"][1:])
 
-                if len(buffered_msg["data_bytes"]) >= buffered_msg["length"]:
+                if len(buffered_msg["payload"]) >= buffered_msg["length"]:
                     yield ProcessedMsg({
                         "timestamp": buffered_msg["timestamp"],
                         "can_id": raw_message["can_id"],
-                        "data_bytes": buffered_msg["data_bytes"][:buffered_msg["length"]], # trim any padding
+                        "payload": buffered_msg["payload"][:buffered_msg["length"]], # trim any padding
                     })
                     del buffer[raw_message["can_id"]]
             case 0x3: # flow control frame
@@ -104,4 +103,4 @@ if __name__ == "__main__":
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
 
     for msg in assembled_isotp_messages:
-        print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['data_bytes']]}\n\n")
+        print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}\n\n")
