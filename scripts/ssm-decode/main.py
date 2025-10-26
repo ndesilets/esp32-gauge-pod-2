@@ -119,9 +119,11 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                     "payload": raw_message["payload"][2:],
                 })
             case ISOTP_FrameType.CONSECUTIVE_FRAME:
+                if raw_message["can_id"] not in buffer:
+                    continue # trc file likely has response first without corresponding request
+
                 sequence_num = pci_low
                 # TODO: check sequence number
-                # TODO: check if id is even in the buffer
 
                 buffered_msg = buffer[raw_message["can_id"]]
                 buffered_msg["payload"].extend(raw_message["payload"][1:])
@@ -183,9 +185,9 @@ class SSMMessage(TypedDict):
 def ssm_parse_list_request(message: ProcessedMsg) -> SSMRequest:
     processed_payload = []
 
-    # ssm uses 24 bit addresses
-    num_requested_addrs = len(message["payload"]) - 2
-    for i in range(num_requested_addrs // 3):
+    # ssm uses 24 bit addresses, skip first two bytes (service id, subfunction)
+    num_requested_addrs = (len(message["payload"]) - 2) // 3
+    for i in range(num_requested_addrs):
         addr_start = 2 + (i * 3)
         addr_bytes = message["payload"][addr_start:addr_start + 3]
         memory_addr = (addr_bytes[0] << 16) | (addr_bytes[1] << 8) | addr_bytes[2]
@@ -217,7 +219,7 @@ if __name__ == "__main__":
         print(address_lookup)
 
     # raw_can_messages = parse_canhacker_trc("C:\\Users\\Nic\\Downloads\\staticreadings\\ethanolconcfinal-single.trc")
-    raw_can_messages = parse_canhacker_trc("/Users/nic/Downloads/staticreadings/ethanolconcfinal-single.trc")
+    raw_can_messages = parse_canhacker_trc("/Users/nic/Downloads/staticreadings/dam-single.trc")
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
 
     latest_parameters: Dict[int, int] = {}
