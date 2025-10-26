@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Dict, Iterator, TypedDict
 
 
@@ -11,6 +12,9 @@ unconfirmed:
 0x7E2	request to ABS/VDC
 0x7EA	response from ABS/VDC
 """
+
+
+# --- CAN stuff
 
 
 class CANHackerMsg(TypedDict):
@@ -96,6 +100,24 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
             case _:
                 print("wthelly")
                 continue
+
+
+# --- SSM3 stuff
+
+
+# first byte - service identifier
+class SS3MSIDs(int, Enum):
+    READ_MEMORY_BY_ADDR_LIST = 0xA8
+    READ_SINGLE_PARAMETER = 0xA4
+
+
+class SSM3Message(TypedDict):
+    timestamp: float
+    sid: int
+    command: 
+
+
+# --- main
 
 
 if __name__ == "__main__":
