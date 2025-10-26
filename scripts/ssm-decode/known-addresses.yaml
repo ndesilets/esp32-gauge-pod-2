@@ -46,8 +46,8 @@
 0x000020:
   name: "Fuel Injector #1 Pulse Width"
   value:
-    unit: V
-    expr: x/50
+    unit: µs
+    expr: x*256
 0x000029:
   name: Accelerator Pedal Angle
   value:
