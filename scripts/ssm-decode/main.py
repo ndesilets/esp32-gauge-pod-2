@@ -219,7 +219,7 @@ if __name__ == "__main__":
         print(address_lookup)
 
     # raw_can_messages = parse_canhacker_trc("C:\\Users\\Nic\\Downloads\\staticreadings\\ethanolconcfinal-single.trc")
-    raw_can_messages = parse_canhacker_trc("/Users/nic/Downloads/staticreadings/dam-single.trc")
+    raw_can_messages = parse_canhacker_trc("/Users/nic/Downloads/staticreadings/injdutycycle.trc")
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
 
     latest_parameters: Dict[int, int] = {}
