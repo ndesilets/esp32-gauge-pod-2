@@ -34,6 +34,12 @@ class BufferedProcessedMsg(TypedDict):
     length: int
     payload: list[int]
 
+class ISOTP_FrameType(int, Enum):
+    SINGLE_FRAME = 0x0
+    FIRST_FRAME = 0x1
+    CONSECUTIVE_FRAME = 0x2
+    FLOW_CONTROL = 0x3
+
 
 def parse_canhacker_trc(file_path: str) -> Iterator[CANHackerMsg]:
     with open(file_path, "r") as f:
@@ -58,17 +64,17 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
 
     for raw_message in raw_messages:
         pci_byte = raw_message["payload"][0]
-        pci_high = (pci_byte & 0xF0) >> 4
-        pci_low = pci_byte & 0x0F
+        pci_high = (pci_byte & 0xF0) >> 4 # frame type
+        pci_low = pci_byte & 0x0F # frame specific data
 
         match pci_high:
-            case 0x0: # single frame
+            case ISOTP_FrameType.SINGLE_FRAME:
                 yield ProcessedMsg({
                     "timestamp": raw_message["timestamp"],
                     "can_id": raw_message["can_id"],
                     "payload": raw_message["payload"][1:],
                 })
-            case 0x1: # first frame
+            case ISOTP_FrameType.FIRST_FRAME:
                 upper_len_bits = pci_low 
                 lower_len_bits = raw_message["payload"][1]
                 data_length = (upper_len_bits << 8) | lower_len_bits
@@ -79,7 +85,7 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                     "length": data_length,
                     "payload": raw_message["payload"][2:],
                 })
-            case 0x2: # consecutive frame
+            case ISOTP_FrameType.CONSECUTIVE_FRAME:
                 sequence_num = pci_low
                 # TODO: check sequence number
                 # TODO: check if id is even in the buffer
@@ -94,7 +100,7 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                         "payload": buffered_msg["payload"][:buffered_msg["length"]], # trim any padding
                     })
                     del buffer[raw_message["can_id"]]
-            case 0x3: # flow control frame
+            case ISOTP_FrameType.FLOW_CONTROL: # flow control frame
                 # don't care
                 pass
             case _:
@@ -102,46 +108,47 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                 continue
 
 
-# --- SSM3 stuff
+# --- SSM stuff
 
 # - requests
 
 # first byte - service identifier
-class SSM3ServiceID(int, Enum):
+class SSMServiceID(int, Enum):
     REQ_READ_MEMORY_BY_ADDR_LIST = 0xA8
     RES_READ_MEMORY_BY_ADDR_LIST = 0xE8
     REQ_READ_SINGLE_PARAMETER = 0xA4
     RES_READ_SINGLE_PARAMETER = 0xE4
 
 # second byte - subfunction
-class SSM3Subfunction(int, Enum):
+class SSMSubfunction(int, Enum):
     PLAIN_LIST = 0x00
     START_CONTINUOUS_READ = 0x01
     STOP_CONTINUOUS_READ = 0x02
 
-class SSM3Request(TypedDict):
+class SSMRequest(TypedDict):
     timestamp: float
-    service: SSM3ServiceID
-    subfunction: SSM3Subfunction
+    service: SSMServiceID
+    subfunction: SSMSubfunction
     payload: list[int] # list of memory addresses (24-bit combined)
 
-class SSM3Response(TypedDict):
+class SSMResponse(TypedDict):
     timestamp: float
-    service: SSM3ServiceID
+    service: SSMServiceID
     payload: list[int] # list of bytes read from memory
 
-class SSM3Message(TypedDict):
+class SSMMessage(TypedDict):
     timestamp: float
     sid: int
-    command: SSM3ServiceID
-    subfunction: SSM3Subfunction
+    command: SSMServiceID
+    subfunction: SSMSubfunction
     payload: list[int]
 
 # - functions
 
-def ssm3_parse_list_request(message: ProcessedMsg) -> SSM3Request:
+def ssm_parse_list_request(message: ProcessedMsg) -> SSMRequest:
     processed_payload = []
 
+    # ssm uses 24 bit addresses
     num_requested_addrs = len(message["payload"]) - 2
     for i in range(num_requested_addrs // 3):
         addr_start = 2 + (i * 3)
@@ -149,17 +156,17 @@ def ssm3_parse_list_request(message: ProcessedMsg) -> SSM3Request:
         memory_addr = (addr_bytes[0] << 16) | (addr_bytes[1] << 8) | addr_bytes[2]
         processed_payload.append(memory_addr)
 
-    return SSM3Request({
+    return SSMRequest({
         "timestamp": message["timestamp"],
-        "service": SSM3ServiceID(message["payload"][0]),
-        "subfunction": SSM3Subfunction(message["payload"][1]),
+        "service": SSMServiceID(message["payload"][0]),
+        "subfunction": SSMSubfunction(message["payload"][1]),
         "payload": processed_payload,
     })
 
-def ssm3_parse_list_response(message: ProcessedMsg) -> SSM3Response:
-    return SSM3Request({
+def ssm_parse_list_response(message: ProcessedMsg) -> SSMResponse:
+    return SSMRequest({
         "timestamp": message["timestamp"],
-        "service": SSM3ServiceID(message["payload"][0]),
+        "service": SSMServiceID(message["payload"][0]),
         "payload": message["payload"][1:],
     })
 
@@ -173,30 +180,29 @@ if __name__ == "__main__":
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
 
     latest_parameters: Dict[int, int] = {}
-    last_ssm3_request: SSM3Request | None = None
+    last_ssm_request: SSMRequest | None = None
 
     for msg in assembled_isotp_messages:
         print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
 
         service_id = msg["payload"][0]
-
         match service_id:
-            case SSM3ServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
-                ssm3_request = ssm3_parse_list_request(msg)
-                print(f"SSM3 requested addresses: {[f'0x{i:03x}' for i in ssm3_request['payload']]}")
+            case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
+                ssm_request = ssm_parse_list_request(msg)
+                print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
                 
-                last_ssm3_request = ssm3_request
-            case SSM3ServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
-                if last_ssm3_request is None:
+                last_ssm_request = ssm_request
+            case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
+                if last_ssm_request is None:
                     continue
 
-                ssm3_response = ssm3_parse_list_response(msg)
-                print(f"SSM3 address responses: {[f'0x{i:02x}' for i in ssm3_response['payload']]}")
+                ssm_response = ssm_parse_list_response(msg)
+                print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
 
                 # check if matches last request, at least in terms of requested number of addresses
 
-                num_requested = len(last_ssm3_request["payload"])
-                num_received = len(ssm3_response["payload"])
+                num_requested = len(last_ssm_request["payload"])
+                num_received = len(ssm_response["payload"])
 
                 if num_received != num_requested:
                     print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
@@ -204,8 +210,8 @@ if __name__ == "__main__":
 
                 # upsert memory addresses with their latest value
 
-                for i, addr in enumerate(last_ssm3_request["payload"]):
-                    latest_parameters[addr] = ssm3_response["payload"][i]
+                for i, addr in enumerate(last_ssm_request["payload"]):
+                    latest_parameters[addr] = ssm_response["payload"][i]
             case _:
                 print("what the absolute shidd")
 
