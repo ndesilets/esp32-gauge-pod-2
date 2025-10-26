@@ -1,5 +1,7 @@
+import yaml
+
 from enum import Enum
-from typing import Dict, Iterator, TypedDict
+from typing import Dict, Iterator, TypedDict, cast
 
 
 """"
@@ -14,7 +16,38 @@ unconfirmed:
 """
 
 
-# --- CAN stuff
+"""
+memory addr stuff
+"""
+
+
+class AddressValue(TypedDict):
+    unit: str
+    expr: str
+class AddressInfo(TypedDict):
+    name: str
+    value: AddressValue
+
+
+def print_addresses(latest_parameters: Dict[int, int]) -> None:
+    for addr, value in sorted(latest_parameters.items()):
+        if addr in address_lookup:
+            addr_info = address_lookup[addr]
+            name = addr_info["name"]
+            unit = addr_info["value"]["unit"]
+            expr = addr_info["value"]["expr"]
+
+            x = value
+            transformed_value = eval(expr)
+
+            print(f"{addr:#08x} ({name}): {transformed_value} {unit}")
+        else:
+            print(f"{addr:#08x}: {value:#04x}")
+
+
+"""
+CAN stuff
+"""
 
 
 class CANHackerMsg(TypedDict):
@@ -108,7 +141,9 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                 continue
 
 
-# --- SSM stuff
+"""
+SSM stuff
+"""
 
 # - requests
 
@@ -164,17 +199,23 @@ def ssm_parse_list_request(message: ProcessedMsg) -> SSMRequest:
     })
 
 def ssm_parse_list_response(message: ProcessedMsg) -> SSMResponse:
-    return SSMRequest({
+    return SSMResponse({
         "timestamp": message["timestamp"],
         "service": SSMServiceID(message["payload"][0]),
         "payload": message["payload"][1:],
     })
 
 
-# --- main
+"""
+main
+"""
 
 
 if __name__ == "__main__":
+    with open("known-addresses.yaml", "r") as f:
+        address_lookup = cast(Dict[int, AddressInfo], yaml.safe_load(f))
+        print(address_lookup)
+
     # raw_can_messages = parse_canhacker_trc("C:\\Users\\Nic\\Downloads\\staticreadings\\ethanolconcfinal-single.trc")
     raw_can_messages = parse_canhacker_trc("/Users/nic/Downloads/staticreadings/ethanolconcfinal-single.trc")
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
@@ -183,13 +224,13 @@ if __name__ == "__main__":
     last_ssm_request: SSMRequest | None = None
 
     for msg in assembled_isotp_messages:
-        print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
+        # print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
 
         service_id = msg["payload"][0]
         match service_id:
             case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
                 ssm_request = ssm_parse_list_request(msg)
-                print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
+                # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
                 
                 last_ssm_request = ssm_request
             case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
@@ -197,7 +238,7 @@ if __name__ == "__main__":
                     continue
 
                 ssm_response = ssm_parse_list_response(msg)
-                print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
+                # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
 
                 # check if matches last request, at least in terms of requested number of addresses
 
@@ -215,11 +256,8 @@ if __name__ == "__main__":
             case _:
                 print("what the absolute shidd")
 
-        print("latest parameters:")
-        for addr, value in latest_parameters.items():
-            print(f"\t{addr:#08x}: {value:#04x}")    
+        # print()
 
-        print()
+    print("latest parameters:")
+    print_addresses(latest_parameters) 
 
-
-        
