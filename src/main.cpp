@@ -40,7 +40,7 @@ void encodeCanFrame(const CanFrame& frame, char* buffer, size_t bufferSize,
 
   // handle timestamp
   if (withTimestamp) {
-    // assume milliseconds, varies by version but in this case i don't care
+    // assume milliseconds, varies by version but in this case w/e
     uint16_t now = (uint16_t)(millis() % 0xFFFF);
     offset += snprintf(buffer + offset, bufferSize - offset, "%04X", now);
   }
@@ -51,7 +51,7 @@ void encodeCanFrame(const CanFrame& frame, char* buffer, size_t bufferSize,
   buffer[MIN(offset, bufferSize - 1)] = '\0';
 }
 
-// assumes that sender implements SLCAN correctly, if not well fuck me
+// assumes that sender implements SLCAN correctly, if not well fuck me lmao
 void decodeCanFrame(const char* buffer, CanFrame& frame) {
   int n = 0;
 
