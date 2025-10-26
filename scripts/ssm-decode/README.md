@@ -7,5 +7,10 @@ if you want to know how ISO-TP and SSM works this seems to be close enough, but 
 requirements:
 - python >= 3.10
 
-usage:
-- set path to CANHacker .trc file (one day i'll stop hardcoding it)
+## usage
+
+provide the path to a CANHacker `.trc` file w/ `--trc` (or `-t`) flag.
+
+```powershell
+python main.py --trc "mytrace.trc"
+```

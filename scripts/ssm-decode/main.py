@@ -1,6 +1,8 @@
+import argparse
 import yaml
 
 from enum import Enum
+from pathlib import Path
 from typing import Dict, Iterator, TypedDict, cast
 
 
@@ -120,10 +122,10 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                 })
             case ISOTP_FrameType.CONSECUTIVE_FRAME:
                 if raw_message["can_id"] not in buffer:
-                    continue # trc file likely has response first without corresponding request
+                    continue # trc file likely started with incomplete data
 
                 sequence_num = pci_low
-                # TODO: check sequence number
+                # TODO: check sequence number, but probably not an issue
 
                 buffered_msg = buffer[raw_message["can_id"]]
                 buffered_msg["payload"].extend(raw_message["payload"][1:])
@@ -214,12 +216,30 @@ main
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="lmao"
+    )
+    parser.add_argument(
+        "-t",
+        "--trc",
+        "--file",
+        "--input",
+        dest="trc",
+        metavar="PATH",
+        type=str,
+        required=False,
+        help="Path to the CANHacker .trc file to parse",
+    )
+    args = parser.parse_args()
+
     with open("known-addresses.yaml", "r") as f:
         address_lookup = cast(Dict[int, AddressInfo], yaml.safe_load(f))
-        print(address_lookup)
+        # print(address_lookup)
 
-    # raw_can_messages = parse_canhacker_trc("C:\\Users\\Nic\\Downloads\\staticreadings\\ethanolconcfinal-single.trc")
-    raw_can_messages = parse_canhacker_trc("/Users/nic/Downloads/staticreadings/injdutycycle.trc")
+    # for being lazy
+    trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/boost.trc"
+
+    raw_can_messages = parse_canhacker_trc(trc_path)
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
 
     latest_parameters: Dict[int, int] = {}
