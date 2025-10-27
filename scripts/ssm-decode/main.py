@@ -23,10 +23,11 @@ memory addr stuff
 class AddressValue(TypedDict):
     unit: str
     expr: str
+
 class AddressInfo(TypedDict):
     name: str
+    length: int
     value: AddressValue
-
 
 def pretty_print_address(latest_parameters: Dict[int, int]) -> None:
     for addr, value in sorted(latest_parameters.items()):
@@ -73,6 +74,7 @@ class ISOTP_FrameType(int, Enum):
     FLOW_CONTROL = 0x3
 
 
+# parse trace file into raw can messages
 def parse_canhacker_trc(file_path: str) -> Iterator[CANHackerMsg]:
     with open(file_path, "r") as f:
         for line in f:
@@ -179,9 +181,16 @@ class SSMMessage(TypedDict):
     subfunction: SSMSubfunction
     payload: list[int]
 
-class AddrValue(TypedDict):
+class RawAddrValue(TypedDict):
     address: int
     raw_value: int
+
+class ProcessedAddrValue(TypedDict):
+    addresses: list[int]
+    value: int
+    # optional fields, empty if address is unknown
+    name: str
+    unit: str
 
 # - functions
 
@@ -210,47 +219,106 @@ def ssm_parse_list_response(message: ProcessedMsg) -> SSMResponse:
         "payload": message["payload"][1:],
     })
 
-def ssm_handle_messages(message: ProcessedMsg) -> Iterator[list[AddrValue]]:
+# TODO: just move this into a class method or something to make it cleaner
+# produce list of addresses with their values from request and response pair
+def process_ssm_messages(address_lookup: Dict[int, AddressInfo], messages: Iterator[ProcessedMsg]) -> Iterator[list[ProcessedAddrValue]]:
     # jank static variable
-    if not hasattr(ssm_handle_messages, "last_ssm_request"):
-        ssm_handle_messages.last_ssm_request = None # pyright: ignore[reportFunctionMemberAccess] (shut up let me do bad things)
+    if not hasattr(process_ssm_messages, "last_ssm_request"):
+        process_ssm_messages.last_ssm_request = None # pyright: ignore[reportFunctionMemberAccess] (shut up let me do bad things)
 
     # print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
 
-    service_id = message["payload"][0]
-    match service_id:
-        case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
-            ssm_request = ssm_parse_list_request(message)
-            # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
-            
-            ssm_handle_messages.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
-        case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
-            if ssm_handle_messages.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
-                return None
+    for message in messages:
+        service_id = message["payload"][0]
+        match service_id:
+            case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
+                ssm_request = ssm_parse_list_request(message)
+                # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
+                
+                process_ssm_messages.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
+            case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
+                if process_ssm_messages.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
+                    continue
 
-            ssm_response = ssm_parse_list_response(message)
-            # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
+                ssm_response = ssm_parse_list_response(message)
+                # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
 
-            # check if matches last request, at least in terms of requested number of addresses
-            num_requested = len(ssm_handle_messages.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
-            num_received = len(ssm_response["payload"])
-            if num_received != num_requested:
-                print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
-                return None
+                # check if matches last request, at least in terms of requested number of addresses
 
-            # emit combined address + value pairs
+                num_requested = len(process_ssm_messages.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
+                num_received = len(ssm_response["payload"])
+                if num_received != num_requested:
+                    print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
+                    continue
 
-            addr_values = []
-            for i, addr in enumerate(ssm_handle_messages.last_ssm_request["payload"]): # pyright: ignore[reportFunctionMemberAccess]
-                addr_values.append(
-                    AddrValue({
-                        "address": addr,
-                        "raw_value": ssm_response["payload"][i],
-                    })
-                )
-            yield addr_values
-        case _:
-            print("what the absolute shidd")
+                # emit single or combined address + value pairs
+
+                addr_values: list[ProcessedAddrValue] = []
+                i = 0
+                while i < num_requested:
+                    addr = process_ssm_messages.last_ssm_request["payload"][i] # pyright: ignore[reportFunctionMemberAccess]
+
+                    # check if memory address is known and if the value spans multiple addresses
+                    if addr in address_lookup:
+                        # handle single/multiple address+byte values
+
+                        ref = address_lookup[addr]
+                        addr_length = ref["length"] 
+
+                        addresses = []
+                        combined_value = 0
+                        j = 0
+                        while j < addr_length:
+                            addresses.append(addr + j)
+                            raw_value = ssm_response["payload"][i + j]
+                            combined_value |= raw_value << (8 * (addr_length - j - 1))
+                            j += 1
+                        
+                        # apply expression to combined value
+                        x = combined_value # x is referenced in expr
+                        transformed_value = eval(ref["value"]["expr"])
+
+                        addr_values.append(ProcessedAddrValue({
+                            "addresses": addresses,
+                            "value": transformed_value,
+                            "name": ref["name"],
+                            "unit": ref["value"]["unit"],
+                        }))
+
+                        i += addr_length
+                    else:
+                        # assume single address / byte value
+                        addr_values.append(ProcessedAddrValue({
+                            "addresses": [addr],
+                            "value": ssm_response["payload"][i],
+                            "name": "",
+                            "unit": "",
+                        }))
+
+                        i += 1
+                yield addr_values
+            case _:
+                print("what the absolute shidd")
+                pass
+
+
+"""
+output stuff
+"""
+
+
+def display_slop(message_frames: list[list[ProcessedAddrValue]]):
+    for frame in message_frames:
+        for message in sorted(frame, key=lambda x: x["addresses"][0]):
+            known_address = message["name"] != "" and message["unit"] != ""
+            if known_address:
+                print(f"{message['addresses'][0]:#08x} ({message['name']}): {message['value']} {message['unit']}")
+            else:
+                print(f"{message['addresses'][0]:#08x}: {message['value']:#04x}")
+        print()
+
+def display_csv(message_frames: list[list[ProcessedAddrValue]]):
+    pass
 
 
 """
@@ -271,6 +339,16 @@ if __name__ == "__main__":
         required=False,
         help="Path to the CANHacker .trc file to parse",
     )
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        type=str,
+        choices=["slop", "csv"],
+        default="slop",
+        required=False,
+        help="Whether or not to display in slop format or csv format",
+    )
     args = parser.parse_args()
 
     with open("known-addresses.yaml", "r") as f:
@@ -280,17 +358,14 @@ if __name__ == "__main__":
     # for being lazy
     trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/boost.trc"
 
-    received_values = []
     raw_can_messages = parse_canhacker_trc(trc_path)
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
+    processed_ssm_frames = process_ssm_messages(address_lookup, assembled_isotp_messages)
 
-    for msg in assembled_isotp_messages:
-        for addr_values in ssm_handle_messages(msg):
-            received_values.append(addr_values)
+    match args.output:
+        case "slop":
+            display_slop(list(processed_ssm_frames))
+        case "csv":
+            display_csv(list(processed_ssm_frames))
+            pass
     
-    # TODO: output based on mode
-    for addr_values in received_values:
-        for addr_value in addr_values:
-            latest_parameters = {addr_value["address"]: addr_value["raw_value"]}
-            pretty_print_address(latest_parameters)
-        print("-----")
