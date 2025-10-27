@@ -6,15 +6,12 @@ from pathlib import Path
 from typing import Dict, Iterator, TypedDict, cast
 
 
-""""
-0x7E0 request to ecu
-0x7E8 response from ecu
-
-unconfirmed:
-0x7E1	request to TCU
-0x7E9	response from TCU
-0x7E2	request to ABS/VDC
-0x7EA	response from ABS/VDC
+"""
+notes:
+    0x7E0   request to ecu
+    0x7E8   response from ecu
+    0x7B0	request to ABS/VDC
+    0x7B8	response from ABS/VDC
 """
 
 
@@ -31,7 +28,7 @@ class AddressInfo(TypedDict):
     value: AddressValue
 
 
-def print_addresses(latest_parameters: Dict[int, int]) -> None:
+def pretty_print_address(latest_parameters: Dict[int, int]) -> None:
     for addr, value in sorted(latest_parameters.items()):
         if addr in address_lookup:
             addr_info = address_lookup[addr]
@@ -182,6 +179,10 @@ class SSMMessage(TypedDict):
     subfunction: SSMSubfunction
     payload: list[int]
 
+class AddrValue(TypedDict):
+    address: int
+    raw_value: int
+
 # - functions
 
 def ssm_parse_list_request(message: ProcessedMsg) -> SSMRequest:
@@ -209,6 +210,48 @@ def ssm_parse_list_response(message: ProcessedMsg) -> SSMResponse:
         "payload": message["payload"][1:],
     })
 
+def ssm_handle_messages(message: ProcessedMsg) -> Iterator[list[AddrValue]]:
+    # jank static variable
+    if not hasattr(ssm_handle_messages, "last_ssm_request"):
+        ssm_handle_messages.last_ssm_request = None # pyright: ignore[reportFunctionMemberAccess] (shut up let me do bad things)
+
+    # print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
+
+    service_id = message["payload"][0]
+    match service_id:
+        case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
+            ssm_request = ssm_parse_list_request(message)
+            # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
+            
+            ssm_handle_messages.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
+        case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
+            if ssm_handle_messages.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
+                return None
+
+            ssm_response = ssm_parse_list_response(message)
+            # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
+
+            # check if matches last request, at least in terms of requested number of addresses
+            num_requested = len(ssm_handle_messages.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
+            num_received = len(ssm_response["payload"])
+            if num_received != num_requested:
+                print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
+                return None
+
+            # emit combined address + value pairs
+
+            addr_values = []
+            for i, addr in enumerate(ssm_handle_messages.last_ssm_request["payload"]): # pyright: ignore[reportFunctionMemberAccess]
+                addr_values.append(
+                    AddrValue({
+                        "address": addr,
+                        "raw_value": ssm_response["payload"][i],
+                    })
+                )
+            yield addr_values
+        case _:
+            print("what the absolute shidd")
+
 
 """
 main
@@ -222,8 +265,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "-t",
         "--trc",
-        "--file",
-        "--input",
         dest="trc",
         metavar="PATH",
         type=str,
@@ -239,47 +280,17 @@ if __name__ == "__main__":
     # for being lazy
     trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/boost.trc"
 
+    received_values = []
     raw_can_messages = parse_canhacker_trc(trc_path)
     assembled_isotp_messages = process_isotp_messages(raw_can_messages)
 
-    latest_parameters: Dict[int, int] = {}
-    last_ssm_request: SSMRequest | None = None
-
     for msg in assembled_isotp_messages:
-        # print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
-
-        service_id = msg["payload"][0]
-        match service_id:
-            case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
-                ssm_request = ssm_parse_list_request(msg)
-                # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
-                
-                last_ssm_request = ssm_request
-            case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
-                if last_ssm_request is None:
-                    continue
-
-                ssm_response = ssm_parse_list_response(msg)
-                # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
-
-                # check if matches last request, at least in terms of requested number of addresses
-
-                num_requested = len(last_ssm_request["payload"])
-                num_received = len(ssm_response["payload"])
-
-                if num_received != num_requested:
-                    print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
-                    continue
-
-                # upsert memory addresses with their latest value
-
-                for i, addr in enumerate(last_ssm_request["payload"]):
-                    latest_parameters[addr] = ssm_response["payload"][i]
-            case _:
-                print("what the absolute shidd")
-
-        # print()
-
-    print("latest parameters:")
-    print_addresses(latest_parameters) 
-
+        for addr_values in ssm_handle_messages(msg):
+            received_values.append(addr_values)
+    
+    # TODO: output based on mode
+    for addr_values in received_values:
+        for addr_value in addr_values:
+            latest_parameters = {addr_value["address"]: addr_value["raw_value"]}
+            pretty_print_address(latest_parameters)
+        print("-----")
