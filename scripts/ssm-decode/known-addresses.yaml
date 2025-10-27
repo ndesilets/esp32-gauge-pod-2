@@ -1,65 +1,79 @@
+# adapted from romraider
 0x000008: 
   name: Coolant Temperature
+  length: 1
   value:
     unit: F
     expr: 32+9*(x-40)/5
 0x000009: 
   name: "A/F Correction #1"
+  length: 1
   value:
     unit: "%"
     expr: (x-128)*100/128
 0x00000a: 
   name: "A/F Learning #1"
+  length: 1
   value:
     unit: "%"
     expr: (x-128)*100/128
 0x000011:
   name: Ignition Total Timing
+  length: 1
   value:
     unit: deg
     expr: (x-128)/2
 0x000012:
   name: Intake Air Temperature
+  length: 1
   value:
     unit: F
     expr: 32+9*(x-40)/5
 0x000013:
   name: Mass Airflow
+  length: 2
   value:
     unit: g/s
     expr: x/100
 0x000015:
   name: Throttle Opening Angle
+  length: 1
   value:
     unit: "%"
     expr: x*100/255
 0x000018:
   name: Rear O2 Sensor
+  length: 2
   value:
     unit: V
     expr: x/200
 0x00001d:
   name: Mass Airflow Sensor Voltage
+  length: 1
   value:
     unit: V
     expr: x/50
 0x000020:
   name: "Fuel Injector #1 Pulse Width"
+  length: 1
   value:
     unit: µs
     expr: x*256
 0x000029:
   name: Accelerator Pedal Angle
+  length: 1
   value:
     unit: "%"
     expr: x*100/255
 0x000042:
   name: "A/F Sensor #1 Current"
+  length: 1
   value:
     unit: mA
     expr: (x-128)/8
 0x000046:
   name: "A/F Sensor #1"
+  length: 1
   value:
     unit: AFR
     expr: x/128*14.7
