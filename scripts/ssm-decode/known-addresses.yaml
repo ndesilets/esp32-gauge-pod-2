@@ -17,6 +17,12 @@
   value:
     unit: "%"
     expr: (x-128)*100/128
+0x00000e: 
+  name: "Engine Speed"
+  length: 2
+  value:
+    unit: RPM
+    expr: x/4
 0x000011:
   name: Ignition Total Timing
   length: 1

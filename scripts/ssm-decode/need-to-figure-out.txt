@@ -9,10 +9,8 @@
 
     vvv --- seemingly always present regardless of whats logged 
     
-    # one of these should be DAM, gear pos, boost, feedback knock, fine knock learn, RPM
+    # one of these should be DAM, gear pos, boost, feedback knock, fine knock learn
 
-    0x00000e: 0x00
-    0x00000f: 0x00
     0x000014: 0x13 # seems to have some noise in it, differs between logs (MAP sensor?)
     0x000019: 0x00
 
