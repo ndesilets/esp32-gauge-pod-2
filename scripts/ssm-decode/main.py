@@ -106,7 +106,7 @@ def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[Pro
                 yield ProcessedMsg({
                     "timestamp": raw_message["timestamp"],
                     "can_id": raw_message["can_id"],
-                    "payload": raw_message["payload"][1:],
+                    "payload": raw_message["payload"][1:pci_low + 1],
                 })
             case ISOTP_FrameType.FIRST_FRAME:
                 upper_len_bits = pci_low 
