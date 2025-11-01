@@ -104,5 +104,9 @@ abs_vdc:
     name: "Steering Angle"
     value:
       unit: deg
-      # TODO: 
-      expr: x
+      # full left to center = ~450 - 0
+      # center to full right = 65535 - ~65085
+      # 2.5 turns lock to lock is -450 to 450 but there's probably about up to ~5 deg offset error
+      # 0 might be true center and 65535 might be 1 deg right, but idk
+      # sign is flipped so negative means left
+      expr: (((x + 32768) % 65536) - 32768) * -1
