@@ -1,10 +1,8 @@
 import argparse
-import csv
-import time
+import pandas as pd
 import yaml
 
 from enum import Enum
-from pathlib import Path
 from typing import Dict, Iterator, Optional, TypedDict, cast
 
 
@@ -31,7 +29,7 @@ class AddressInfo(TypedDict):
 
 
 """
-CAN stuff
+CAN/ISOTP stuff
 """
 
 
@@ -353,32 +351,6 @@ def parse_uds_message(address_lookup: Dict[int, AddressInfo], message: Processed
 
 
 """
-output stuff
-"""
-
-
-def display_slop(message_frames: list[list[ProcessedECUAddr]]):
-    for frame in message_frames:
-        for message in sorted(frame, key=lambda x: x["addresses"][0]):
-            known_address = message["name"] != "" and message["unit"] != ""
-            if known_address:
-                print(f"{message['addresses'][0]:#08x} ({message['name']}): {message['value']} {message['unit']}")
-            else:
-                print(f"{message['addresses'][0]:#08x}: {message['value']:#04x}")
-        print()
-
-def display_csv(message_frames: list[list[ProcessedECUAddr]]):
-    # this is easy if you're just talking to the ecu, but in the future i'll need to also make requests to at least the abs/vdc unit also, so need to figure that out
-    pass
-
-    # unix_ts = int(time.time())
-    # with open(f"sensors-{unix_ts}.csv", 'w', newline='') as csvfile:
-    #     writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-    #     writer.writerow(['Spam'] * 5 + ['Baked Beans'])
-    #     writer.writerow(['Spam', 'Lovely Spam', 'Wonderful Spam'])
-
-
-"""
 main
 """
 
@@ -401,8 +373,8 @@ if __name__ == "__main__":
         "--output",
         dest="output",
         type=str,
-        choices=["slop", "csv"],
-        default="noop",
+        choices=["slop", "csv", "none"],
+        default="csv",
         required=False,
         help="Whether or not to display in slop format or csv format",
     )
@@ -413,12 +385,13 @@ if __name__ == "__main__":
         # print(address_lookup)
 
     # for being lazy
-    trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
-    # trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
+    # trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
+    trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
 
     raw_can_messages = parse_canhacker_trc(trc_path)
     isotp_messages = parse_isotp_messages(raw_can_messages)
 
+    df = pd.DataFrame()
     for message in isotp_messages:
         # print(f"timestamp: {message['timestamp']}, can_id: {hex(message['can_id'])}, payload: {[hex(b) for b in message['payload']]}")
 
@@ -426,22 +399,43 @@ if __name__ == "__main__":
         match id:
             case ModuleID.ECU_REQ | ModuleID.ECU_RES:
                 ecu_response = process_ssm_messages(address_lookup["ecu"], message)
-                print(ecu_response)
+                if ecu_response:
+                    fields = dict(
+                        map(
+                            lambda x: (
+                                x["name"] 
+                                    if x["name"] 
+                                    else "".join(f"{addr:#08x}" for addr in x["addresses"]),
+                                x["value"] if x["name"] else hex(int(x["value"]))
+                            ), 
+                            ecu_response    
+                        )
+                    )
+                    frame = {"timestamp": message["timestamp"], **fields}
+                    df = pd.concat([df, pd.DataFrame([frame])], ignore_index=True)
+                # print(ecu_response)
             case ModuleID.ABS_VDC_REQ | ModuleID.ABS_VDC_RES:
                 abs_vcs_response = parse_uds_message(address_lookup["abs_vdc"], message)
-                print(abs_vcs_response)
+                if abs_vcs_response:
+                    fields = {
+                        abs_vcs_response["name"] if abs_vcs_response["name"] else hex(abs_vcs_response["requested_id"]): 
+                        abs_vcs_response["value"] if abs_vcs_response["name"] else hex(abs_vcs_response["value"])
+                    }
+                    frame = {"timestamp": message["timestamp"], **fields}
+                    df = pd.concat([df, pd.DataFrame([frame])], ignore_index=True)
+                # print(abs_vcs_response)
             case _:
                 print(f"skipping message with id {hex(id)}")
                 continue
 
-
-    # match args.output:
-    #     case "slop":
-    #         display_slop(list(processed_ssm_frames))
-    #     case "csv":
-    #         display_csv(list(processed_ssm_frames))
-    #         pass
-    #     case "noop":
-    #         for message in processed_ssm_frames:
-    #             pass
-    #         pass
+    match args.output:
+        case "slop":
+            print("lmao")
+            pass
+        case "csv":
+            print(df.to_csv(index=False))
+            pass
+        case "none":
+            for message in isotp_messages:
+                pass # trigger generators
+            pass
