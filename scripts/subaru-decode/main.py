@@ -27,7 +27,7 @@ class AddressInfo(TypedDict):
     length: int
     value: AddressValue
 
-def init_reference():
+def init_reference() -> Dict[str, Dict[int, AddressInfo]]:
     with open("known-addresses.yaml", "r") as f:
         return cast(Dict[str, Dict[int, AddressInfo]], yaml.safe_load(f))
 
@@ -208,11 +208,11 @@ def ssm_parse_list_response(message: ProcessedMsg) -> SSMResponse:
     })
 
 # TODO: just move this into a class method or something to make it cleaner
-# produce list of addresses with their values from request and response pair
-def process_ssm_messages(address_lookup: Dict[int, AddressInfo], message: ProcessedMsg) -> Optional[list[ProcessedECUAddr]]:
+# returns list of addresses with their values from a response and its corresponding request
+def process_ssm_message(address_lookup: Dict[int, AddressInfo], message: ProcessedMsg) -> Optional[list[ProcessedECUAddr]]:
     # jank static variable
-    if not hasattr(process_ssm_messages, "last_ssm_request"):
-        process_ssm_messages.last_ssm_request = None # pyright: ignore[reportFunctionMemberAccess] (shut up let me do bad things)
+    if not hasattr(process_ssm_message, "last_ssm_request"):
+        process_ssm_message.last_ssm_request = None # pyright: ignore[reportFunctionMemberAccess] (shut up let me do bad things)
 
     # print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
         
@@ -222,9 +222,9 @@ def process_ssm_messages(address_lookup: Dict[int, AddressInfo], message: Proces
             ssm_request = ssm_parse_list_request(message)
             # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
             
-            process_ssm_messages.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
+            process_ssm_message.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
         case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
-            if process_ssm_messages.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
+            if process_ssm_message.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
                 return None
 
             ssm_response = ssm_parse_list_response(message)
@@ -232,7 +232,7 @@ def process_ssm_messages(address_lookup: Dict[int, AddressInfo], message: Proces
 
             # check if matches last request, at least in terms of requested number of addresses
 
-            num_requested = len(process_ssm_messages.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
+            num_requested = len(process_ssm_message.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
             num_received = len(ssm_response["payload"])
             if num_received != num_requested:
                 print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
@@ -243,7 +243,7 @@ def process_ssm_messages(address_lookup: Dict[int, AddressInfo], message: Proces
             addr_values: list[ProcessedECUAddr] = []
             i = 0
             while i < num_requested:
-                addr = process_ssm_messages.last_ssm_request["payload"][i] # pyright: ignore[reportFunctionMemberAccess]
+                addr = process_ssm_message.last_ssm_request["payload"][i] # pyright: ignore[reportFunctionMemberAccess]
 
                 # check if memory address is known and if the value spans multiple addresses
                 if addr in address_lookup:
@@ -311,7 +311,8 @@ class ProcessedUDSServiceID(TypedDict):
     unit: str
 
 
-def parse_uds_message(address_lookup: Dict[int, AddressInfo], message: ProcessedMsg) -> Optional[ProcessedUDSServiceID]:
+# returns parsed uds responses, ignores requests
+def process_uds_message(address_lookup: Dict[int, AddressInfo], message: ProcessedMsg) -> Optional[ProcessedUDSServiceID]:
     service_id = message["payload"][0]
     match service_id:
         case UDSServiceID.READ_DATA_BY_ID:
@@ -363,7 +364,7 @@ def process_messages_to_dataframe(isotp_messages: list[ProcessedMsg]):
         id = message["can_id"]
         match id:
             case ModuleID.ECU_REQ | ModuleID.ECU_RES:
-                ecu_response = process_ssm_messages(address_lookup["ecu"], message)
+                ecu_response = process_ssm_message(address_lookup["ecu"], message)
                 if ecu_response:
                     fields = dict(
                         map(
@@ -380,7 +381,7 @@ def process_messages_to_dataframe(isotp_messages: list[ProcessedMsg]):
                     df = pd.concat([df, pd.DataFrame([frame])], ignore_index=True)
                 # print(ecu_response)
             case ModuleID.ABS_VDC_REQ | ModuleID.ABS_VDC_RES:
-                abs_vcs_response = parse_uds_message(address_lookup["abs_vdc"], message)
+                abs_vcs_response = process_uds_message(address_lookup["abs_vdc"], message)
                 if abs_vcs_response:
                     fields = {
                         abs_vcs_response["name"] if abs_vcs_response["name"] else hex(abs_vcs_response["requested_id"]): 
