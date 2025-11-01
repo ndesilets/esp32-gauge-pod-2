@@ -419,8 +419,8 @@ if __name__ == "__main__":
         "--output",
         dest="output",
         type=str,
-        choices=["slop", "csv"],
-        default="csv",
+        choices=["json", "csv"],
+        default="json",
         required=False,
         help="Whether or not to display in slop format or csv format",
     )
@@ -438,8 +438,8 @@ if __name__ == "__main__":
     df = process_messages_to_dataframe(list(isotp_messages))
 
     match args.output:
-        case "slop":
-            print("lmao")
+        case "json":
+            print(df.to_json(orient="records", lines=True))
             pass
         case "csv":
             print(df.to_csv(index=False))
