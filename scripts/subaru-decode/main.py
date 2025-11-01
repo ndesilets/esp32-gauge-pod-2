@@ -27,6 +27,10 @@ class AddressInfo(TypedDict):
     length: int
     value: AddressValue
 
+def init_reference():
+    with open("known-addresses.yaml", "r") as f:
+        return cast(Dict[str, Dict[int, AddressInfo]], yaml.safe_load(f))
+
 
 """
 CAN/ISOTP stuff
@@ -350,48 +354,9 @@ def parse_uds_message(address_lookup: Dict[int, AddressInfo], message: Processed
             return None
 
 
-"""
-main
-"""
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="lmao"
-    )
-    parser.add_argument(
-        "-t",
-        "--trc",
-        dest="trc",
-        metavar="PATH",
-        type=str,
-        required=False,
-        help="Path to the CANHacker .trc file to parse",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        dest="output",
-        type=str,
-        choices=["slop", "csv", "none"],
-        default="csv",
-        required=False,
-        help="Whether or not to display in slop format or csv format",
-    )
-    args = parser.parse_args()
-
-    with open("known-addresses.yaml", "r") as f:
-        address_lookup = cast(Dict[str, Dict[int, AddressInfo]], yaml.safe_load(f))
-        # print(address_lookup)
-
-    # for being lazy
-    # trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
-    trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
-
-    raw_can_messages = parse_canhacker_trc(trc_path)
-    isotp_messages = parse_isotp_messages(raw_can_messages)
-
+def process_messages_to_dataframe(isotp_messages: list[ProcessedMsg]):
     df = pd.DataFrame()
+
     for message in isotp_messages:
         # print(f"timestamp: {message['timestamp']}, can_id: {hex(message['can_id'])}, payload: {[hex(b) for b in message['payload']]}")
 
@@ -428,14 +393,54 @@ if __name__ == "__main__":
                 print(f"skipping message with id {hex(id)}")
                 continue
 
+    return df
+
+
+"""
+main
+"""
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="lmao"
+    )
+    parser.add_argument(
+        "-t",
+        "--trc",
+        dest="trc",
+        metavar="PATH",
+        type=str,
+        required=False,
+        help="Path to the CANHacker .trc file to parse",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        type=str,
+        choices=["slop", "csv"],
+        default="csv",
+        required=False,
+        help="Whether or not to display in slop format or csv format",
+    )
+    args = parser.parse_args()
+
+    address_lookup = init_reference()
+
+    # for being lazy
+    # trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
+    trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
+
+    raw_can_messages = parse_canhacker_trc(trc_path)
+    isotp_messages = parse_isotp_messages(raw_can_messages)
+
+    df = process_messages_to_dataframe(list(isotp_messages))
+
     match args.output:
         case "slop":
             print("lmao")
             pass
         case "csv":
             print(df.to_csv(index=False))
-            pass
-        case "none":
-            for message in isotp_messages:
-                pass # trigger generators
             pass
