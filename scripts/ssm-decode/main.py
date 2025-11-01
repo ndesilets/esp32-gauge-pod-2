@@ -1,22 +1,22 @@
 import argparse
+import csv
+import time
 import yaml
 
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterator, TypedDict, cast
+from typing import Dict, Iterator, Optional, TypedDict, cast
+
+
+class ModuleID(int, Enum):
+    ECU_REQ = 0x7E0
+    ECU_RES = 0x7E8
+    ABS_VDC_REQ = 0x7B0
+    ABS_VDC_RES = 0x7B8
 
 
 """
-notes:
-    0x7E0   request to ecu
-    0x7E8   response from ecu
-    0x7B0	request to ABS/VDC
-    0x7B8	response from ABS/VDC
-"""
-
-
-"""
-memory addr stuff
+memory addr reference
 """
 
 
@@ -28,21 +28,6 @@ class AddressInfo(TypedDict):
     name: str
     length: int
     value: AddressValue
-
-def pretty_print_address(latest_parameters: Dict[int, int]) -> None:
-    for addr, value in sorted(latest_parameters.items()):
-        if addr in address_lookup:
-            addr_info = address_lookup[addr]
-            name = addr_info["name"]
-            unit = addr_info["value"]["unit"]
-            expr = addr_info["value"]["expr"]
-
-            x = value
-            transformed_value = eval(expr)
-
-            print(f"{addr:#08x} ({name}): {transformed_value} {unit}")
-        else:
-            print(f"{addr:#08x}: {value:#04x}")
 
 
 """
@@ -93,7 +78,7 @@ def parse_canhacker_trc(file_path: str) -> Iterator[CANHackerMsg]:
 
 
 #  handle iso-tp messages and emit assembled messages stripped of iso-tp headers
-def process_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[ProcessedMsg]:
+def parse_isotp_messages(raw_messages: Iterator[CANHackerMsg]) -> Iterator[ProcessedMsg]:
     buffer: Dict[int, BufferedProcessedMsg] = {}
 
     for raw_message in raw_messages:
@@ -154,14 +139,15 @@ SSM stuff
 class SSMServiceID(int, Enum):
     REQ_READ_MEMORY_BY_ADDR_LIST = 0xA8
     RES_READ_MEMORY_BY_ADDR_LIST = 0xE8
-    REQ_READ_SINGLE_PARAMETER = 0xA4
-    RES_READ_SINGLE_PARAMETER = 0xE4
+    REQ_IDK_SOMETHING_WITH_ABS_VBC = 0x22 
+    RES_IDK_SOMETHING_WITH_ABS_VBC = 0x62
 
 # second byte - subfunction
 class SSMSubfunction(int, Enum):
     PLAIN_LIST = 0x00
     START_CONTINUOUS_READ = 0x01
     STOP_CONTINUOUS_READ = 0x02
+    IDK_SOMETHING_WITH_ABS_VDC = 0x10
 
 class SSMRequest(TypedDict):
     timestamp: float
@@ -185,7 +171,7 @@ class RawAddrValue(TypedDict):
     address: int
     raw_value: int
 
-class ProcessedAddrValue(TypedDict):
+class ProcessedECUAddr(TypedDict):
     addresses: list[int]
     value: int
     # optional fields, empty if address is unknown
@@ -221,85 +207,149 @@ def ssm_parse_list_response(message: ProcessedMsg) -> SSMResponse:
 
 # TODO: just move this into a class method or something to make it cleaner
 # produce list of addresses with their values from request and response pair
-def process_ssm_messages(address_lookup: Dict[int, AddressInfo], messages: Iterator[ProcessedMsg]) -> Iterator[list[ProcessedAddrValue]]:
+def process_ssm_messages(address_lookup: Dict[int, AddressInfo], message: ProcessedMsg) -> Optional[list[ProcessedECUAddr]]:
     # jank static variable
     if not hasattr(process_ssm_messages, "last_ssm_request"):
         process_ssm_messages.last_ssm_request = None # pyright: ignore[reportFunctionMemberAccess] (shut up let me do bad things)
 
     # print(f"ID: {hex(msg['can_id'])}\nDATA: {[hex(b) for b in msg['payload']]}")
+        
+    service_id = message["payload"][0]
+    match service_id:
+        case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
+            ssm_request = ssm_parse_list_request(message)
+            # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
+            
+            process_ssm_messages.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
+        case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
+            if process_ssm_messages.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
+                return None
 
-    for message in messages:
-        service_id = message["payload"][0]
-        match service_id:
-            case SSMServiceID.REQ_READ_MEMORY_BY_ADDR_LIST:
-                ssm_request = ssm_parse_list_request(message)
-                # print(f"SSM requested addresses: {[f'{i:#08x}' for i in ssm_request['payload']]}")
-                
-                process_ssm_messages.last_ssm_request = ssm_request # pyright: ignore[reportFunctionMemberAccess]
-            case SSMServiceID.RES_READ_MEMORY_BY_ADDR_LIST:
-                if process_ssm_messages.last_ssm_request is None: # pyright: ignore[reportFunctionMemberAccess]
-                    continue
+            ssm_response = ssm_parse_list_response(message)
+            # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
 
-                ssm_response = ssm_parse_list_response(message)
-                # print(f"SSM address responses: {[f'{i:#04x}' for i in ssm_response['payload']]}")
+            # check if matches last request, at least in terms of requested number of addresses
 
-                # check if matches last request, at least in terms of requested number of addresses
+            num_requested = len(process_ssm_messages.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
+            num_received = len(ssm_response["payload"])
+            if num_received != num_requested:
+                print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
+                return None
 
-                num_requested = len(process_ssm_messages.last_ssm_request["payload"]) # pyright: ignore[reportFunctionMemberAccess]
-                num_received = len(ssm_response["payload"])
-                if num_received != num_requested:
-                    print(f"aw hell nah: received {num_received}, does not match requested ({num_requested})")
-                    continue
+            # emit single or combined address + value pairs
 
-                # emit single or combined address + value pairs
+            addr_values: list[ProcessedECUAddr] = []
+            i = 0
+            while i < num_requested:
+                addr = process_ssm_messages.last_ssm_request["payload"][i] # pyright: ignore[reportFunctionMemberAccess]
 
-                addr_values: list[ProcessedAddrValue] = []
-                i = 0
-                while i < num_requested:
-                    addr = process_ssm_messages.last_ssm_request["payload"][i] # pyright: ignore[reportFunctionMemberAccess]
+                # check if memory address is known and if the value spans multiple addresses
+                if addr in address_lookup:
+                    ref = address_lookup[addr]
 
-                    # check if memory address is known and if the value spans multiple addresses
-                    if addr in address_lookup:
-                        # handle single/multiple address+byte values
+                    addresses = []
+                    combined_value = 0
+                    j = 0
+                    while j < ref["length"]:
+                        addresses.append(addr + j)
+                        raw_value = ssm_response["payload"][i + j]
+                        combined_value |= raw_value << (8 * (ref["length"] - j - 1))
+                        j += 1
+                    
+                    final_value = eval(ref["value"]["expr"], globals=None, locals={"x": combined_value})
 
-                        ref = address_lookup[addr]
-                        addr_length = ref["length"] 
+                    addr_values.append(ProcessedECUAddr({
+                        "addresses": addresses,
+                        "value": final_value,
+                        "name": ref["name"],
+                        "unit": ref["value"]["unit"],
+                    }))
 
-                        addresses = []
-                        combined_value = 0
-                        j = 0
-                        while j < addr_length:
-                            addresses.append(addr + j)
-                            raw_value = ssm_response["payload"][i + j]
-                            combined_value |= raw_value << (8 * (addr_length - j - 1))
-                            j += 1
-                        
-                        # apply expression to combined value
-                        x = combined_value # x is referenced in expr
-                        transformed_value = eval(ref["value"]["expr"])
+                    i += ref["length"] 
+                else:
+                    # assume single address / byte value
+                    addr_values.append(ProcessedECUAddr({
+                        "addresses": [addr],
+                        "value": ssm_response["payload"][i],
+                        "name": "",
+                        "unit": "",
+                    }))
 
-                        addr_values.append(ProcessedAddrValue({
-                            "addresses": addresses,
-                            "value": transformed_value,
-                            "name": ref["name"],
-                            "unit": ref["value"]["unit"],
-                        }))
+                    i += 1
+            return addr_values
+        case _:
+            print("what the absolute shidd")
+            return None
 
-                        i += addr_length
-                    else:
-                        # assume single address / byte value
-                        addr_values.append(ProcessedAddrValue({
-                            "addresses": [addr],
-                            "value": ssm_response["payload"][i],
-                            "name": "",
-                            "unit": "",
-                        }))
 
-                        i += 1
-                yield addr_values
-            case _:
-                print("what the absolute shidd")
-                pass
+"""
+ISO 14229-1 UDS stuff
+"""
+
+
+class UDSServiceID(int, Enum):
+   READ_DATA_BY_ID = 0x22
+   POSITIVE_RESPONSE = 0x62
+
+class UDSRequest(TypedDict):
+    timestamp: float
+    requested_id: int # 16 bit id
+
+class UDSResponse(TypedDict):
+    timestamp: float
+    requested_id: int # 16 bit id
+    payload: int # 16 bit value
+
+class ProcessedUDSServiceID(TypedDict):
+    timestamp: float
+    requested_id: int
+    value: int
+    # optional fields, empty if id is unknown
+    name: str
+    unit: str
+
+
+def parse_uds_message(address_lookup: Dict[int, AddressInfo], message: ProcessedMsg) -> Optional[ProcessedUDSServiceID]:
+    service_id = message["payload"][0]
+    match service_id:
+        case UDSServiceID.READ_DATA_BY_ID:
+            uds_request = UDSRequest({
+                "timestamp": message["timestamp"],
+                "requested_id": (message["payload"][1] << 8) | message["payload"][2]
+            })
+            # TODO: might not even really need this
+
+            return None
+        case UDSServiceID.POSITIVE_RESPONSE:
+            uds_response = UDSResponse({
+                "timestamp": message["timestamp"],
+                "requested_id": (message["payload"][1] << 8) | message["payload"][2],
+                "payload": (message["payload"][3] << 8) | message["payload"][4],
+            })
+
+            addr = uds_response["requested_id"]
+            if addr in address_lookup:
+                ref = address_lookup[addr]
+                final_value = eval(ref["value"]["expr"], globals=None, locals={"x": uds_response["payload"]})
+
+                return ProcessedUDSServiceID({
+                    "timestamp": uds_response["timestamp"],     
+                    "requested_id": uds_response["requested_id"],
+                    "value": final_value,
+                    "name": ref["name"],
+                    "unit": ref["value"]["unit"],
+                })
+            else:
+                return ProcessedUDSServiceID({
+                    "timestamp": uds_response["timestamp"],     
+                    "requested_id": uds_response["requested_id"],
+                    "value": uds_response["payload"],
+                    "name": "",
+                    "unit": "",
+                })
+        case _:
+            print(f"unknown service id {hex(service_id)}")
+            return None
 
 
 """
@@ -307,7 +357,7 @@ output stuff
 """
 
 
-def display_slop(message_frames: list[list[ProcessedAddrValue]]):
+def display_slop(message_frames: list[list[ProcessedECUAddr]]):
     for frame in message_frames:
         for message in sorted(frame, key=lambda x: x["addresses"][0]):
             known_address = message["name"] != "" and message["unit"] != ""
@@ -317,8 +367,15 @@ def display_slop(message_frames: list[list[ProcessedAddrValue]]):
                 print(f"{message['addresses'][0]:#08x}: {message['value']:#04x}")
         print()
 
-def display_csv(message_frames: list[list[ProcessedAddrValue]]):
+def display_csv(message_frames: list[list[ProcessedECUAddr]]):
+    # this is easy if you're just talking to the ecu, but in the future i'll need to also make requests to at least the abs/vdc unit also, so need to figure that out
     pass
+
+    # unix_ts = int(time.time())
+    # with open(f"sensors-{unix_ts}.csv", 'w', newline='') as csvfile:
+    #     writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    #     writer.writerow(['Spam'] * 5 + ['Baked Beans'])
+    #     writer.writerow(['Spam', 'Lovely Spam', 'Wonderful Spam'])
 
 
 """
@@ -345,27 +402,46 @@ if __name__ == "__main__":
         dest="output",
         type=str,
         choices=["slop", "csv"],
-        default="slop",
+        default="noop",
         required=False,
         help="Whether or not to display in slop format or csv format",
     )
     args = parser.parse_args()
 
     with open("known-addresses.yaml", "r") as f:
-        address_lookup = cast(Dict[int, AddressInfo], yaml.safe_load(f))
+        address_lookup = cast(Dict[str, Dict[int, AddressInfo]], yaml.safe_load(f))
         # print(address_lookup)
 
     # for being lazy
-    trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/boost.trc"
+    trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
+    # trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
 
     raw_can_messages = parse_canhacker_trc(trc_path)
-    assembled_isotp_messages = process_isotp_messages(raw_can_messages)
-    processed_ssm_frames = process_ssm_messages(address_lookup, assembled_isotp_messages)
+    isotp_messages = parse_isotp_messages(raw_can_messages)
 
-    match args.output:
-        case "slop":
-            display_slop(list(processed_ssm_frames))
-        case "csv":
-            display_csv(list(processed_ssm_frames))
-            pass
-    
+    for message in isotp_messages:
+        # print(f"timestamp: {message['timestamp']}, can_id: {hex(message['can_id'])}, payload: {[hex(b) for b in message['payload']]}")
+
+        id = message["can_id"]
+        match id:
+            case ModuleID.ECU_REQ | ModuleID.ECU_RES:
+                ecu_response = process_ssm_messages(address_lookup["ecu"], message)
+                print(ecu_response)
+            case ModuleID.ABS_VDC_REQ | ModuleID.ABS_VDC_RES:
+                abs_vcs_response = parse_uds_message(address_lookup["abs_vdc"], message)
+                print(abs_vcs_response)
+            case _:
+                print(f"skipping message with id {hex(id)}")
+                continue
+
+
+    # match args.output:
+    #     case "slop":
+    #         display_slop(list(processed_ssm_frames))
+    #     case "csv":
+    #         display_csv(list(processed_ssm_frames))
+    #         pass
+    #     case "noop":
+    #         for message in processed_ssm_frames:
+    #             pass
+    #         pass
