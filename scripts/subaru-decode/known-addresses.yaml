@@ -98,8 +98,8 @@ abs_vdc:
   0x1010:
     name: "Brake Pressure"
     value:
-      unit: psi
-      # TODO: 
+      unit: bar
+      # raw value is in bar
       expr: x
   0x1029:
     name: "Steering Angle"
@@ -107,8 +107,9 @@ abs_vdc:
       unit: deg
       # full left to center = ~450 - 0
       # center to full right = 65535 - ~65085
-      # 2.5 turns lock to lock is -450 to 450 but there's probably about up to ~5 deg offset error
+      # 2.5 turns lock to lock is -450 to 450
       # 0 might be true center and 65535 might be 1 deg right, but idk
       # raw value is in degrees, but overflows and decrements for anything to the right
+      # transforms raw value so that it reads negatives values for left and positive for right
       # sign is flipped so negative means left
       expr: (((x + 32768) % 65536) - 32768) * -1
