@@ -87,10 +87,38 @@ ecu:
   0xff63d4:
     name: "Boost"
     length: 4
+    # TODO: support interpreting floats
     value:
       unit: psi
       expr: x*0.01933677
       # raw value is in mmHg
+  # TODO: verify these
+  0xff6b49:
+    name: "DAM"
+    length: 1
+    value:
+      unit: multiplier
+      expr: x*.0625
+  0xff8480:
+    name: "Fuel Injector #1 Pulse Width"
+    length: 2
+    value:
+      unit: ms 
+      expr: x*.008
+  0xff851c:
+    name: "DAM Multiplier"
+    length: 4
+    # TODO: also a float
+    value:
+      unit: multiplier 
+      expr: x
+  0xff8810:
+    name: "Knock Correction Advance"
+    length: 4
+    # TODO: also a float
+    value:
+      unit: multiplier
+      expr: x
   # --- custom bs
   # TODO
 
