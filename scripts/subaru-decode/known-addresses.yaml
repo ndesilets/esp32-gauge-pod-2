@@ -84,15 +84,15 @@ ecu:
     value:
       unit: AFR
       expr: x/128*14.7
+  # TODO: verify these addresses
   0xff63d4:
     name: "Boost"
     length: 4
-    # TODO: support interpreting floats
+    type: float
     value:
       unit: psi
       expr: x*0.01933677
       # raw value is in mmHg
-  # TODO: verify these
   0xff6b49:
     name: "DAM"
     length: 1
@@ -108,14 +108,14 @@ ecu:
   0xff851c:
     name: "DAM Multiplier"
     length: 4
-    # TODO: also a float
+    type: float
     value:
       unit: multiplier 
       expr: x
   0xff8810:
     name: "Knock Correction Advance"
     length: 4
-    # TODO: also a float
+    type: float
     value:
       unit: multiplier
       expr: x

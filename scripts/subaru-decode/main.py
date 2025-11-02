@@ -1,4 +1,5 @@
 import argparse
+import struct
 import pandas as pd
 import yaml
 
@@ -25,6 +26,7 @@ class AddressValue(TypedDict):
 class AddressInfo(TypedDict):
     name: str
     length: int
+    type: str
     value: AddressValue
 
 def init_reference() -> Dict[str, Dict[int, AddressInfo]]:
@@ -175,7 +177,7 @@ class RawAddrValue(TypedDict):
 
 class ProcessedECUAddr(TypedDict):
     addresses: list[int]
-    value: int
+    value: float
     # optional fields, empty if address is unknown
     name: str
     unit: str
@@ -248,17 +250,29 @@ def process_ssm_message(address_lookup: Dict[int, AddressInfo], message: Process
                 # check if memory address is known and if the value spans multiple addresses
                 if addr in address_lookup:
                     ref = address_lookup[addr]
+                    is_float = ref.get("type") == "float"
 
-                    addresses = []
-                    combined_value = 0
-                    j = 0
-                    while j < ref["length"]:
-                        addresses.append(addr + j)
-                        raw_value = ssm_response["payload"][i + j]
-                        combined_value |= raw_value << (8 * (ref["length"] - j - 1))
-                        j += 1
-                    
-                    final_value = eval(ref["value"]["expr"], globals=None, locals={"x": combined_value})
+                    if is_float:
+                        addresses = []
+                        j = 0
+                        while j < ref["length"]:
+                            addresses.append(ssm_response["payload"][i + j])
+                            j += 1
+                        raw_bytes = bytes(addresses)
+                        float_value = struct.unpack(">f", raw_bytes)[0]
+
+                        final_value = eval(ref["value"]["expr"], globals=None, locals={"x": float_value})
+                    else: # assume int otherwise, normally the case
+                        addresses = []
+                        combined_value = 0
+                        j = 0
+                        while j < ref["length"]:
+                            addresses.append(addr + j)
+                            raw_value = ssm_response["payload"][i + j]
+                            combined_value |= raw_value << (8 * (ref["length"] - j - 1))
+                            j += 1
+                        
+                        final_value = eval(ref["value"]["expr"], globals=None, locals={"x": combined_value})
 
                     addr_values.append(ProcessedECUAddr({
                         "addresses": addresses,
@@ -430,8 +444,8 @@ if __name__ == "__main__":
     address_lookup = init_reference()
 
     # for being lazy
-    # trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
-    trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
+    trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
+    # trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
 
     raw_can_messages = parse_canhacker_trc(trc_path)
     isotp_messages = parse_isotp_messages(raw_can_messages)
