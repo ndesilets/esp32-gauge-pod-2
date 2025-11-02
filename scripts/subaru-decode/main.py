@@ -421,7 +421,7 @@ if __name__ == "__main__":
         dest="output",
         type=str,
         choices=["json", "csv"],
-        default="json",
+        default="csv",
         required=False,
         help="Whether or not to display in slop format or csv format",
     )

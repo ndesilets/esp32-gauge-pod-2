@@ -84,14 +84,15 @@ ecu:
     value:
       unit: AFR
       expr: x/128*14.7
-  # --- adapted from my own blood sweat and tears
   0xff63d4:
     name: "Boost"
     length: 4
     value:
       unit: psi
-      # TODO:
-      expr: x
+      expr: x*0.01933677
+      # raw value is in mmHg
+  # --- custom bs
+  # TODO
 
 abs_vdc:
   0x1010:
@@ -108,5 +109,6 @@ abs_vdc:
       # center to full right = 65535 - ~65085
       # 2.5 turns lock to lock is -450 to 450 but there's probably about up to ~5 deg offset error
       # 0 might be true center and 65535 might be 1 deg right, but idk
+      # raw value is in degrees, but overflows and decrements for anything to the right
       # sign is flipped so negative means left
       expr: (((x + 32768) % 65536) - 32768) * -1
