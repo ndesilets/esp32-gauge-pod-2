@@ -2,6 +2,8 @@
 
 TODO
 
+painful lesson: espressif dropped support for platformio some time in 2024 supposedly because of money, so we're stuck with an older version of the core arduino framework libraries (v2) and a lot of the stuff (like https://github.com/moononournation/Arduino_GFX, which would be nice to use) for this display needs v3. so you either have to use the arduino ide (gross) or use freertos (more complicated).
+
 notes:
 
 - copy .pio\libdeps\esp32-s3-devkitc-1\lvgl\lv_conf_template.h into .pio\libdeps\esp32-s3-devkitc-1\lv_conf.h

@@ -13,6 +13,6 @@ Arduino_GFX* g = new Arduino_AXS15231B(
 
 // then use it
 void setup() {
-  gfx->begin();
-  gfx->fillScreen(YELLOW);
+  g->begin();
+  g->fillScreen(YELLOW);
 }
