@@ -17,3 +17,12 @@ notes:
 - [Waveshare ESP32 3.5" 172×640 Display](https://www.waveshare.com/product/arduino/displays/lcd-spi-qspi/esp32-s3-touch-lcd-3.49.htm)
 - [Adafruit NeoPixel Stick 8x RGBW](https://www.adafruit.com/product/2868)
 - [Adafruit CAN Pal - CAN Bus Transceiver - TJA1051T/3 ](https://www.adafruit.com/product/5708)
+
+
+```
+primary screen:
+    coolant temp, oil temp, oil pressure, AFR, knock
+
+secondary screen:
+    ethanol concentration, injector duty cycle, fuel trims, AFR, short term fuel, long term fuel
+```

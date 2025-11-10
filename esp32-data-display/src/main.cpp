@@ -28,8 +28,8 @@ Arduino_GFX* gfx = new Arduino_AXS15231B(
     0 /* row offset 1 */, 0 /* col offset 2 */, 0 /* row offset 2 */);
 
 static lv_display_t* disp = nullptr;
-static uint16_t* fb = nullptr;      // FULL framebuffer (landscape 640x172)
-static uint16_t* rotbuf = nullptr;  // scratch for rotated blocks (same size)
+static uint16_t* fb = nullptr;  // full framebuffer (landscape 640x172)
+static uint16_t* rotatedbuf = nullptr;
 
 uint32_t millis_cb(void) { return millis(); }
 
@@ -45,15 +45,83 @@ void my_disp_flush(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
   for (int yy = 0; yy < h; ++yy) {
     const uint16_t* srow = src + yy * w;
     for (int xx = 0; xx < w; ++xx) {
-      rotbuf[xx * h + (h - 1 - yy)] = srow[xx];
+      rotatedbuf[xx * h + (h - 1 - yy)] = srow[xx];
     }
   }
 
   const int panel_x = PANEL_W - (y0 + h);
   const int panel_y = x0;
 
-  gfx->draw16bitRGBBitmap(panel_x, panel_y, rotbuf, h, w);
+  gfx->draw16bitRGBBitmap(panel_x, panel_y, rotatedbuf, h, w);
   lv_display_flush_ready(disp);
+}
+
+typedef struct {
+  lv_obj_t* container;
+  lv_obj_t* frame;  // outer border
+  lv_obj_t* title;  // title text
+  lv_obj_t* body;   // inner area for metrics/bar
+} framed_panel_t;
+
+framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
+  framed_panel_t out = {0};
+
+  out.container = lv_obj_create(parent);
+  lv_obj_set_size(out.container, 148, 148);
+  lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_color(out.container, lv_palette_main(LV_PALETTE_CYAN),
+                                0);
+  lv_obj_set_style_pad_left(out.container, 0, 0);
+  lv_obj_set_style_pad_right(out.container, 0, 0);
+  lv_obj_set_style_pad_top(out.container, 8, 0);
+  lv_obj_set_style_pad_bottom(out.container, 0, 0);
+  lv_obj_add_flag(out.container, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+  // border
+  out.frame = lv_obj_create(out.container);
+  lv_obj_set_size(out.frame, 140, 140);
+  lv_obj_set_style_bg_opa(out.frame, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(out.frame, 2, 0);
+  lv_obj_set_style_border_color(out.frame, lv_color_white(), 0);
+  lv_obj_set_style_radius(out.frame, 12, 0);
+  lv_obj_set_style_pad_left(out.frame, 8, 0);
+  lv_obj_set_style_pad_right(out.frame, 8, 0);
+  lv_obj_set_style_pad_top(out.frame, 8, 0);
+  lv_obj_set_style_pad_bottom(out.frame, 8, 0);
+  // important to get text to render over border
+  lv_obj_set_style_border_post(out.frame, false, 0);  // draw border first
+  lv_obj_add_flag(out.frame, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+  // title
+  out.title = lv_label_create(out.frame);
+  lv_label_set_text(out.title, title ? title : "WTHELLY?");
+  lv_obj_set_style_bg_opa(out.title, LV_OPA_COVER, 0);
+  // match frame bg so it looks like its notched
+  lv_obj_set_style_bg_color(out.title, lv_color_black(), 0);
+  lv_obj_set_style_pad_left(out.title, 8, 0);
+  lv_obj_set_style_pad_right(out.title, 8, 0);
+  lv_obj_set_style_pad_top(out.title, 0, 0);
+  lv_obj_set_style_pad_bottom(out.title, 0, 0);
+  lv_obj_set_style_text_color(out.title, lv_color_white(), 0);
+  // overlap title with border
+  lv_obj_align(out.title, LV_ALIGN_TOP_MID, 0,
+               -lv_font_get_line_height(lv_font_get_default()));
+  lv_obj_add_flag(out.title, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+  // Inner body (so contents don’t collide with the border or title)
+  out.body = lv_obj_create(out.frame);
+  lv_obj_set_size(out.body, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_opa(out.body, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(out.body, 0, 0);
+  lv_obj_set_style_pad_top(out.body,
+                           lv_font_get_line_height(lv_font_get_default()),
+                           0);  // leave room for the title
+  lv_obj_set_style_pad_left(out.body, 8, 0);
+  lv_obj_set_style_pad_right(out.body, 8, 0);
+  lv_obj_set_style_pad_bottom(out.body, 8, 0);
+  lv_obj_align(out.body, LV_ALIGN_CENTER, 0, 8);
+
+  return out;
 }
 
 // then use it
@@ -82,17 +150,6 @@ void setup() {
   ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, (0xff - 255));
   ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1);
 
-  // // Hard-force backlight ON to rule out PWM issues
-  // pinMode(PIN_BK, OUTPUT);
-  // digitalWrite(PIN_BK, HIGH);  // flip to LOW if your board is active-low
-
-  // Hard reset the panel
-  pinMode(PIN_RST, OUTPUT);
-  digitalWrite(PIN_RST, LOW);
-  delay(20);
-  digitalWrite(PIN_RST, HIGH);
-  delay(120);
-
   // init display
 
   gfx->begin(40 * 1000 * 1000);
@@ -103,31 +160,29 @@ void setup() {
   lv_init();
   lv_tick_set_cb(millis_cb);
 
-  // LVGL logical landscape canvas
-  const int HRES = PANEL_H, VRES = PANEL_W;
-
-  disp = lv_display_create(HRES, VRES);
+  disp = lv_display_create(PANEL_H, PANEL_W);
   lv_display_set_default(disp);
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
   lv_display_set_flush_cb(disp, my_disp_flush);
 
-  // Full framebuffer (LVGL-side)
-  size_t fb_bytes = HRES * VRES * 2;
+  size_t fb_bytes = PANEL_H * PANEL_W * 2;
   fb = (uint16_t*)heap_caps_malloc(fb_bytes,
                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!fb) fb = (uint16_t*)heap_caps_malloc(fb_bytes, MALLOC_CAP_8BIT);
   lv_display_set_buffers(disp, fb, nullptr, fb_bytes,
                          LV_DISPLAY_RENDER_MODE_FULL);
 
-  // Scratch buffer for rotated blocks (same size as max flush area)
-  rotbuf = (uint16_t*)heap_caps_malloc(fb_bytes,
-                                       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!rotbuf) rotbuf = (uint16_t*)heap_caps_malloc(fb_bytes, MALLOC_CAP_8BIT);
+  rotatedbuf = (uint16_t*)heap_caps_malloc(fb_bytes,
+                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!rotatedbuf)
+    rotatedbuf = (uint16_t*)heap_caps_malloc(fb_bytes, MALLOC_CAP_8BIT);
 
-  // ---------- simple UI to prove it works ----------
+  // init ui
 
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
   lv_obj_set_style_text_color(lv_screen_active(), lv_color_white(), 0);
+
+  // splash image
 
   const lv_image_dsc_t bklogo_dsc = {
       .header =
@@ -148,9 +203,34 @@ void setup() {
   delay(2000);
   lv_obj_del(img);
 
-  lv_obj_t* label = lv_label_create(lv_screen_active());
-  lv_label_set_text_fmt(label, "I'M GEEKED 67 I'M GEEKED 67 I'M GEEKED 67");
-  lv_obj_center(label);
+  // lv_obj_t* label = lv_label_create(lv_screen_active());
+  // lv_label_set_text_fmt(label, "I'M GEEKED 67 I'M GEEKED 67 I'M GEEKED 67");
+  // lv_obj_center(label);
+
+  // lv_refr_now(NULL);
+  // delay(1000);
+  // lv_obj_del(label);
+
+  lv_obj_t* row = lv_obj_create(lv_screen_active());
+  lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+  lv_obj_set_size(row, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(
+      row,
+      LV_FLEX_ALIGN_START,   // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
+  lv_obj_set_style_pad_column(row, 4, 0);  // spacing between items
+  lv_obj_set_style_pad_all(row, 0, 0);
+  lv_obj_set_style_border_width(row, 2, 0);
+  lv_obj_set_style_border_color(row, lv_palette_main(LV_PALETTE_RED), 0);
+  lv_obj_set_style_radius(row, 4, 0);
+
+  framed_panel_t water_temp_panel = framed_panel_create(row, "Water Temp");
+  framed_panel_t oil_temp_panel = framed_panel_create(row, "Oil Temp");
+  framed_panel_t oil_psi_panel = framed_panel_create(row, "Oil PSI");
+  // lv_obj_align(test.frame, LV_ALIGN_LEFT_MID, 0, 0);
 
   Serial.println("Setup done");
 }
