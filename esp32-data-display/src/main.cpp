@@ -67,50 +67,46 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
   framed_panel_t out = {0};
 
   out.container = lv_obj_create(parent);
-  lv_obj_set_size(out.container, 148, 148);
+  lv_obj_set_size(out.container, 148, 168);
   lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(out.container, 0, 0);
   lv_obj_set_style_border_color(out.container, lv_palette_main(LV_PALETTE_CYAN),
                                 0);
   lv_obj_set_style_pad_left(out.container, 0, 0);
   lv_obj_set_style_pad_right(out.container, 0, 0);
   lv_obj_set_style_pad_top(out.container, 8, 0);
   lv_obj_set_style_pad_bottom(out.container, 0, 0);
-  lv_obj_add_flag(out.container, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
   // border
   out.frame = lv_obj_create(out.container);
-  lv_obj_set_size(out.frame, 140, 140);
+  lv_obj_set_size(out.frame, 142, 154);
   lv_obj_set_style_bg_opa(out.frame, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(out.frame, 2, 0);
+  lv_obj_set_style_border_width(out.frame, 3, 0);
   lv_obj_set_style_border_color(out.frame, lv_color_white(), 0);
   lv_obj_set_style_radius(out.frame, 12, 0);
   lv_obj_set_style_pad_left(out.frame, 8, 0);
   lv_obj_set_style_pad_right(out.frame, 8, 0);
-  lv_obj_set_style_pad_top(out.frame, 8, 0);
-  lv_obj_set_style_pad_bottom(out.frame, 8, 0);
+  // lv_obj_set_style_pad_top(out.frame, 8, 0);
+  // lv_obj_set_style_pad_bottom(out.frame, 8, 0);
   // important to get text to render over border
-  lv_obj_set_style_border_post(out.frame, false, 0);  // draw border first
-  lv_obj_add_flag(out.frame, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
   // title
-  out.title = lv_label_create(out.frame);
+  out.title = lv_label_create(out.container);
   lv_label_set_text(out.title, title ? title : "WTHELLY?");
   lv_obj_set_style_bg_opa(out.title, LV_OPA_COVER, 0);
-  // match frame bg so it looks like its notched
+  // notch the frame border
   lv_obj_set_style_bg_color(out.title, lv_color_black(), 0);
-  lv_obj_set_style_pad_left(out.title, 8, 0);
-  lv_obj_set_style_pad_right(out.title, 8, 0);
-  lv_obj_set_style_pad_top(out.title, 0, 0);
-  lv_obj_set_style_pad_bottom(out.title, 0, 0);
+  lv_obj_set_style_pad_left(out.title, 12, 0);
+  lv_obj_set_style_pad_right(out.title, 12, 0);
   lv_obj_set_style_text_color(out.title, lv_color_white(), 0);
   // overlap title with border
-  lv_obj_align(out.title, LV_ALIGN_TOP_MID, 0,
-               -lv_font_get_line_height(lv_font_get_default()));
-  lv_obj_add_flag(out.title, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_coord_t lh = lv_font_get_line_height(lv_font_get_default());
+  lv_obj_align_to(out.title, out.frame, LV_ALIGN_OUT_TOP_MID, 0, lh / 2);
+  // make sure it draws on top
 
   // Inner body (so contents don’t collide with the border or title)
   out.body = lv_obj_create(out.frame);
-  lv_obj_set_size(out.body, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_size(out.body, LV_PCT(100), 100);
   lv_obj_set_style_bg_opa(out.body, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.body, 0, 0);
   lv_obj_set_style_pad_top(out.body,
@@ -223,13 +219,13 @@ void setup() {
   );
   lv_obj_set_style_pad_column(row, 4, 0);  // spacing between items
   lv_obj_set_style_pad_all(row, 0, 0);
-  lv_obj_set_style_border_width(row, 2, 0);
+  lv_obj_set_style_border_width(row, 0, 0);
   lv_obj_set_style_border_color(row, lv_palette_main(LV_PALETTE_RED), 0);
   lv_obj_set_style_radius(row, 4, 0);
 
-  framed_panel_t water_temp_panel = framed_panel_create(row, "Water Temp");
-  framed_panel_t oil_temp_panel = framed_panel_create(row, "Oil Temp");
-  framed_panel_t oil_psi_panel = framed_panel_create(row, "Oil PSI");
+  framed_panel_t water_temp_panel = framed_panel_create(row, "W.TEMP");
+  framed_panel_t oil_temp_panel = framed_panel_create(row, "O.TEMP");
+  framed_panel_t oil_psi_panel = framed_panel_create(row, "O.PSI");
   // lv_obj_align(test.frame, LV_ALIGN_LEFT_MID, 0, 0);
 
   Serial.println("Setup done");
