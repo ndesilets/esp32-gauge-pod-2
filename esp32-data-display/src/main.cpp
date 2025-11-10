@@ -19,7 +19,7 @@ Arduino_DataBus* bus = new Arduino_ESP32QSPI(
     GPIO_NUM_12 /* D1 */, GPIO_NUM_13 /* D2 */, GPIO_NUM_14 /* D3 */);
 
 Arduino_GFX* gfx = new Arduino_AXS15231B(
-    bus, GPIO_NUM_21 /* RST */, 2 /* rotation */, false /* IPS */,
+    bus, GPIO_NUM_21 /* RST */, 0 /* rotation */, false /* IPS */,
     172 /* width */, 640 /* height */, 0 /* col offset 1 */,
     0 /* row offset 1 */, 0 /* col offset 2 */, 0 /* row offset 2 */);
 
