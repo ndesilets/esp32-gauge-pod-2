@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
+#include <bklogo.h>
 #include <lvgl.h>
 
 #include "driver/ledc.h"
@@ -124,11 +125,30 @@ void setup() {
   if (!rotbuf) rotbuf = (uint16_t*)heap_caps_malloc(fb_bytes, MALLOC_CAP_8BIT);
 
   // ---------- simple UI to prove it works ----------
-  lv_obj_t* label = lv_label_create(lv_screen_active());
 
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
   lv_obj_set_style_text_color(lv_screen_active(), lv_color_white(), 0);
 
+  const lv_image_dsc_t bklogo_dsc = {
+      .header =
+          {
+              .cf = LV_COLOR_FORMAT_RGB565,
+              .w = 640,
+              .h = 172,
+          },
+      .data_size = sizeof(image_data_bklogo),
+      .data = (const uint8_t*)image_data_bklogo,
+  };
+  lv_obj_t* img = lv_image_create(lv_screen_active());
+  lv_image_set_src(img, &bklogo_dsc);
+  lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
+
+  // hide after 2s
+  lv_refr_now(NULL);
+  delay(2000);
+  lv_obj_del(img);
+
+  lv_obj_t* label = lv_label_create(lv_screen_active());
   lv_label_set_text_fmt(label, "I'M GEEKED 67 I'M GEEKED 67 I'M GEEKED 67");
   lv_obj_center(label);
 

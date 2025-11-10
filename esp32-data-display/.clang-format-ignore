@@ -1,1 +1,2 @@
 include/esp_panel_board_custom_conf.h
+src/bklogo*.h
