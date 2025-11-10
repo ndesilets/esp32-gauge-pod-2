@@ -6,6 +6,9 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#define PANEL_W 172
+#define PANEL_H 640
+
 #define PIN_BK GPIO_NUM_8
 #define PIN_RST GPIO_NUM_21
 #define LEDC_TIMER LEDC_TIMER_0
@@ -20,38 +23,36 @@ Arduino_DataBus* bus = new Arduino_ESP32QSPI(
 
 Arduino_GFX* gfx = new Arduino_AXS15231B(
     bus, GPIO_NUM_21 /* RST */, 0 /* rotation */, false /* IPS */,
-    172 /* width */, 640 /* height */, 0 /* col offset 1 */,
+    PANEL_W /* width */, PANEL_H /* height */, 0 /* col offset 1 */,
     0 /* row offset 1 */, 0 /* col offset 2 */, 0 /* row offset 2 */);
 
-uint32_t screenWidth;
-uint32_t screenHeight;
-uint32_t bufSize;
-// lv_display_t* disp;
-uint16_t* disp_draw_buf;
-static uint32_t buf_pixels, buf_bytes;
-
 static lv_display_t* disp = nullptr;
-static uint16_t* fb = nullptr;  // full-frame RGB565 buffer
+static uint16_t* fb = nullptr;      // FULL framebuffer (landscape 640x172)
+static uint16_t* rotbuf = nullptr;  // scratch for rotated blocks (same size)
 
 uint32_t millis_cb(void) { return millis(); }
 
-void my_print(lv_log_level_t level, const char* buf) {
-  LV_UNUSED(level);
-  Serial.println(buf);
-  Serial.flush();
-}
-
-/* LVGL calls it when a rendered image needs to copied to the display*/
+// rotate 90 degrees
 void my_disp_flush(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
-#ifndef DIRECT_RENDER_MODE
-  uint32_t w = lv_area_get_width(area);
-  uint32_t h = lv_area_get_height(area);
+  const int w = lv_area_get_width(area);   // LVGL area width  (landscape space)
+  const int h = lv_area_get_height(area);  // LVGL area height (landscape space)
+  const int x0 = area->x1;
+  const int y0 = area->y1;
 
-  gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t*)px_map, w, h);
-#endif  // #ifndef DIRECT_RENDER_MODE
+  const uint16_t* src = reinterpret_cast<const uint16_t*>(px_map);
 
-  /*Call it to tell LVGL you are ready*/
-  lv_disp_flush_ready(disp);
+  for (int yy = 0; yy < h; ++yy) {
+    const uint16_t* srow = src + yy * w;
+    for (int xx = 0; xx < w; ++xx) {
+      rotbuf[xx * h + (h - 1 - yy)] = srow[xx];
+    }
+  }
+
+  const int panel_x = PANEL_W - (y0 + h);
+  const int panel_y = x0;
+
+  gfx->draw16bitRGBBitmap(panel_x, panel_y, rotbuf, h, w);
+  lv_display_flush_ready(disp);
 }
 
 // then use it
@@ -101,50 +102,41 @@ void setup() {
   lv_init();
   lv_tick_set_cb(millis_cb);
 
-  screenWidth = gfx->width();
-  screenHeight = gfx->height();
+  // LVGL logical landscape canvas
+  const int HRES = PANEL_H, VRES = PANEL_W;
 
-  disp = lv_display_create(screenWidth, screenHeight);
+  disp = lv_display_create(HRES, VRES);
   lv_display_set_default(disp);
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
   lv_display_set_flush_cb(disp, my_disp_flush);
 
-  size_t buf_bytes = screenWidth * screenHeight * 2;
-
-  const size_t fb_bytes = screenWidth * screenHeight * 2;
+  // Full framebuffer (LVGL-side)
+  size_t fb_bytes = HRES * VRES * 2;
   fb = (uint16_t*)heap_caps_malloc(fb_bytes,
                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!fb) fb = (uint16_t*)heap_caps_malloc(fb_bytes, MALLOC_CAP_8BIT);
-
   lv_display_set_buffers(disp, fb, nullptr, fb_bytes,
                          LV_DISPLAY_RENDER_MODE_FULL);
 
+  // Scratch buffer for rotated blocks (same size as max flush area)
+  rotbuf = (uint16_t*)heap_caps_malloc(fb_bytes,
+                                       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!rotbuf) rotbuf = (uint16_t*)heap_caps_malloc(fb_bytes, MALLOC_CAP_8BIT);
+
   // ---------- simple UI to prove it works ----------
   lv_obj_t* label = lv_label_create(lv_screen_active());
-  lv_label_set_text_fmt(label, "Hello LVGL %d.%d.%d", LVGL_VERSION_MAJOR,
-                        LVGL_VERSION_MINOR, LVGL_VERSION_PATCH);
-  lv_obj_center(label);
 
-  // Ensure an immediate frame
-  lv_refr_now(NULL);
+  lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
+  lv_obj_set_style_text_color(lv_screen_active(), lv_color_white(), 0);
+
+  lv_label_set_text_fmt(label, "I'M GEEKED 67 I'M GEEKED 67 I'M GEEKED 67");
+  lv_obj_center(label);
 
   Serial.println("Setup done");
 }
 
 void loop() {
-  lv_task_handler();
+  lv_timer_handler();
 
   delay(16);
-  // for (int d = 0; d <= 1023; d += 16) {
-  //   ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, d);
-  //   ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
-  //   // gfx->fillScreen(GREEN);
-  //   delay(33);
-  // }
-  // for (int d = 1023; d >= 0; d -= 16) {
-  //   ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, d);
-  //   ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
-  //   // gfx->fillScreen(GREEN);
-  //   delay(33);
-  // }
 }
