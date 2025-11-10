@@ -67,7 +67,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
   framed_panel_t out = {0};
 
   out.container = lv_obj_create(parent);
-  lv_obj_set_size(out.container, 148, 168);
+  lv_obj_set_size(out.container, 148, LV_PCT(100));
   lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.container, 0, 0);
   lv_obj_set_style_border_color(out.container, lv_palette_main(LV_PALETTE_CYAN),
@@ -79,16 +79,15 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
 
   // border
   out.frame = lv_obj_create(out.container);
-  lv_obj_set_size(out.frame, 142, 154);
+  lv_obj_set_size(out.frame, 142, LV_PCT(100));
   lv_obj_set_style_bg_opa(out.frame, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.frame, 3, 0);
   lv_obj_set_style_border_color(out.frame, lv_color_white(), 0);
   lv_obj_set_style_radius(out.frame, 12, 0);
-  lv_obj_set_style_pad_left(out.frame, 8, 0);
-  lv_obj_set_style_pad_right(out.frame, 8, 0);
-  // lv_obj_set_style_pad_top(out.frame, 8, 0);
-  // lv_obj_set_style_pad_bottom(out.frame, 8, 0);
-  // important to get text to render over border
+  lv_obj_set_style_pad_left(out.frame, 4, 0);
+  lv_obj_set_style_pad_right(out.frame, 4, 0);
+  lv_obj_set_style_pad_bottom(out.frame, 0, 0);
+  lv_obj_set_style_pad_top(out.frame, 0, 0);
 
   // title
   out.title = lv_label_create(out.container);
@@ -102,20 +101,126 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
   // overlap title with border
   lv_coord_t lh = lv_font_get_line_height(lv_font_get_default());
   lv_obj_align_to(out.title, out.frame, LV_ALIGN_OUT_TOP_MID, 0, lh / 2);
-  // make sure it draws on top
 
-  // Inner body (so contents don’t collide with the border or title)
+  // --- inner body
+
   out.body = lv_obj_create(out.frame);
-  lv_obj_set_size(out.body, LV_PCT(100), 100);
+  lv_obj_set_size(out.body, LV_PCT(100), LV_PCT(100) - 12);
   lv_obj_set_style_bg_opa(out.body, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.body, 0, 0);
-  lv_obj_set_style_pad_top(out.body,
-                           lv_font_get_line_height(lv_font_get_default()),
-                           0);  // leave room for the title
+  lv_obj_set_style_border_color(out.body, lv_palette_main(LV_PALETTE_PINK), 0);
+  lv_obj_set_style_pad_top(out.body, 4, 0);
   lv_obj_set_style_pad_left(out.body, 8, 0);
   lv_obj_set_style_pad_right(out.body, 8, 0);
-  lv_obj_set_style_pad_bottom(out.body, 8, 0);
+  lv_obj_set_style_pad_bottom(out.body, 4, 0);
+  lv_obj_set_flex_flow(out.body, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(out.body,
+                        LV_FLEX_ALIGN_START,   // top
+                        LV_FLEX_ALIGN_CENTER,  // horizontal
+                        LV_FLEX_ALIGN_START);
+  lv_obj_set_style_pad_column(out.body, 0, 0);  // spacing between items
+  lv_obj_set_style_pad_row(out.body, 0, 0);     // spacing between items
   lv_obj_align(out.body, LV_ALIGN_CENTER, 0, 8);
+
+  // main value
+
+  lv_obj_t* main_value = lv_label_create(out.body);
+  lv_obj_set_width(main_value, LV_PCT(100));
+  lv_obj_set_style_text_color(main_value, lv_color_white(), 0);
+  lv_obj_set_style_text_align(main_value, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(main_value, &lv_font_montserrat_44, 0);
+  lv_obj_set_style_border_width(main_value, 0, 0);
+  lv_obj_set_style_border_color(main_value, lv_palette_main(LV_PALETTE_CYAN),
+                                0);
+  lv_label_set_text(main_value, "196");
+
+  // min/max
+
+  lv_obj_t* minmax_container = lv_obj_create(out.body);
+  lv_obj_set_style_bg_opa(minmax_container, LV_OPA_TRANSP, 0);
+  lv_obj_set_size(minmax_container, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_border_width(minmax_container, 0, 0);
+  lv_obj_set_style_border_color(minmax_container,
+                                lv_palette_main(LV_PALETTE_CYAN), 0);
+  lv_obj_set_flex_flow(minmax_container, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(minmax_container,
+                        LV_FLEX_ALIGN_SPACE_BETWEEN,  // main axis
+                        LV_FLEX_ALIGN_CENTER,         // cross axis
+                        LV_FLEX_ALIGN_START           // track align
+  );
+  lv_obj_set_style_pad_column(minmax_container, 0, 0);  // spacing between items
+  lv_obj_set_style_pad_all(minmax_container, 0, 0);
+  lv_obj_set_style_pad_top(minmax_container, 4, 0);
+  lv_obj_set_style_pad_bottom(minmax_container, 16, 0);
+
+  lv_obj_t* min_label = lv_label_create(minmax_container);
+  lv_obj_set_width(min_label, LV_PCT(100));
+  lv_obj_set_style_text_align(min_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(min_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(min_label, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_pad_all(min_label, 0, 0);
+  lv_label_set_text(min_label, "87 / 203");
+
+  // lv_obj_t* max_label = lv_label_create(minmax_container);
+  // lv_obj_set_style_text_color(max_label, lv_color_white(), 0);
+  // lv_obj_set_style_text_font(max_label, &lv_font_montserrat_16, 0);
+  // lv_obj_set_style_pad_all(max_label, 0, 0);
+  // lv_label_set_text(max_label, "203");
+
+  // bar gauge
+
+  static lv_style_t style_bg;
+  static lv_style_t style_indic;
+
+  lv_style_init(&style_bg);
+  lv_style_set_border_color(&style_bg,
+                            lv_palette_darken(LV_PALETTE_DEEP_ORANGE, 1));
+  lv_style_set_border_width(&style_bg, 2);
+  lv_style_set_pad_left(&style_bg, 6);
+  lv_style_set_pad_right(&style_bg, 6);
+  lv_style_set_pad_top(&style_bg, 6);
+  lv_style_set_pad_bottom(&style_bg, 6);
+  lv_style_set_radius(&style_bg, 6);
+  lv_style_set_anim_duration(&style_bg, 1000);
+
+  lv_style_init(&style_indic);
+  lv_style_set_bg_opa(&style_indic, LV_OPA_COVER);
+  lv_style_set_bg_color(&style_indic, lv_color_white());
+  lv_style_set_radius(&style_indic, 3);
+
+  lv_obj_t* bar = lv_bar_create(out.body);
+  lv_obj_remove_style_all(bar);
+  lv_obj_add_style(bar, &style_bg, 0);
+  lv_obj_add_style(bar, &style_indic, LV_PART_INDICATOR);
+
+  lv_obj_set_size(bar, LV_PCT(100), 20);
+  lv_bar_set_range(bar, 0, 240);
+  lv_obj_center(bar);
+  lv_bar_set_value(bar, 196, LV_ANIM_OFF);
+
+  // gauge scale
+
+  lv_obj_t* scale = lv_scale_create(out.body);
+
+  // TODO set own style instead of what im assuming is global
+  lv_obj_set_style_line_color(scale, lv_color_white(), LV_PART_ITEMS);
+  lv_obj_set_style_line_color(scale, lv_color_white(), LV_PART_INDICATOR);
+  lv_obj_set_style_text_color(scale, lv_color_white(), LV_PART_INDICATOR);
+
+  lv_obj_set_size(scale, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_pad_left(scale, 8, 0);
+  lv_obj_set_style_pad_right(scale, 8, 0);
+  lv_scale_set_mode(scale, LV_SCALE_MODE_HORIZONTAL_BOTTOM);
+  lv_obj_center(scale);
+
+  lv_scale_set_label_show(scale, true);
+
+  lv_scale_set_total_tick_count(scale, 2);
+  lv_scale_set_major_tick_every(scale, 1);
+
+  lv_obj_set_style_length(scale, 3, LV_PART_ITEMS);
+  lv_obj_set_style_length(scale, 6, LV_PART_INDICATOR);
+  lv_scale_set_range(scale, 160, 240);
 
   return out;
 }
