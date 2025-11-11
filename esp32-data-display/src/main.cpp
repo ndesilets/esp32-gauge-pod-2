@@ -31,6 +31,9 @@ static lv_display_t* disp = nullptr;
 static uint16_t* fb = nullptr;  // full framebuffer (landscape 640x172)
 static uint16_t* rotatedbuf = nullptr;
 
+// pulled this outta ye olde eyedropper
+lv_color_t SubaruReddishOrangeThing = {.blue = 6, .green = 1, .red = 254};
+
 uint32_t millis_cb(void) { return millis(); }
 
 // rotate 90 degrees
@@ -180,8 +183,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   static lv_style_t style_indic;
 
   lv_style_init(&style_bg);
-  lv_style_set_border_color(&style_bg,
-                            lv_palette_darken(LV_PALETTE_DEEP_ORANGE, 1));
+  lv_style_set_border_color(&style_bg, SubaruReddishOrangeThing);
   lv_style_set_border_width(&style_bg, 2);
   lv_style_set_pad_left(&style_bg, 6);
   lv_style_set_pad_right(&style_bg, 6);
@@ -254,8 +256,7 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
   // Enable only the bottom border
   lv_obj_set_style_border_side(out.container, LV_BORDER_SIDE_BOTTOM, 0);
   lv_obj_set_style_border_width(out.container, 1, 0);
-  lv_obj_set_style_border_color(
-      out.container, lv_palette_darken(LV_PALETTE_DEEP_ORANGE, 1), 0);
+  lv_obj_set_style_border_color(out.container, SubaruReddishOrangeThing, 0);
   lv_obj_set_flex_flow(out.container, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(out.container,
                         LV_FLEX_ALIGN_START,   // main axis
@@ -296,11 +297,13 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
 
   out.cur_val = lv_label_create(vals_container);
   lv_label_set_text(out.cur_val, cur_val);
-  lv_obj_set_style_text_font(out.cur_val, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_font(out.cur_val, &lv_font_montserrat_18, 0);
   lv_obj_set_style_text_color(out.cur_val, lv_color_white(), 0);
 
   out.max_val = lv_label_create(vals_container);
   lv_label_set_text(out.max_val, max_val);
+  // TODO need to do own styles
+  lv_obj_set_style_text_font(out.max_val, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_align(out.max_val, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_style_text_color(out.max_val, lv_color_white(), 0);
   lv_obj_set_flex_grow(out.max_val, 1);
