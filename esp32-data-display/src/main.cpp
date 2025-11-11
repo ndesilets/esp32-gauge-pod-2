@@ -61,9 +61,19 @@ typedef struct {
   lv_obj_t* frame;  // outer border
   lv_obj_t* title;  // title text
   lv_obj_t* body;   // inner area for metrics/bar
+
+  lv_obj_t* main_value;
+  lv_obj_t* minmax_value;
+
+  // config
+  int min_gauge_value;
+  int max_gauge_value;
+
 } framed_panel_t;
 
-framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
+framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
+                                   const char* main_val, const char* minmax_val,
+                                   int min_gauge_value, int max_gauge_value) {
   framed_panel_t out = {0};
 
   out.container = lv_obj_create(parent);
@@ -124,15 +134,15 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
 
   // main value
 
-  lv_obj_t* main_value = lv_label_create(out.body);
-  lv_obj_set_width(main_value, LV_PCT(100));
-  lv_obj_set_style_text_color(main_value, lv_color_white(), 0);
-  lv_obj_set_style_text_align(main_value, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(main_value, &lv_font_montserrat_44, 0);
-  lv_obj_set_style_border_width(main_value, 0, 0);
-  lv_obj_set_style_border_color(main_value, lv_palette_main(LV_PALETTE_CYAN),
-                                0);
-  lv_label_set_text(main_value, "196");
+  out.main_value = lv_label_create(out.body);
+  lv_obj_set_width(out.main_value, LV_PCT(100));
+  lv_obj_set_style_text_color(out.main_value, lv_color_white(), 0);
+  lv_obj_set_style_text_align(out.main_value, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(out.main_value, &lv_font_montserrat_44, 0);
+  lv_obj_set_style_border_width(out.main_value, 0, 0);
+  lv_obj_set_style_border_color(out.main_value,
+                                lv_palette_main(LV_PALETTE_CYAN), 0);
+  lv_label_set_text(out.main_value, main_val);
 
   // min/max
 
@@ -153,21 +163,18 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
   lv_obj_set_style_pad_top(minmax_container, 4, 0);
   lv_obj_set_style_pad_bottom(minmax_container, 16, 0);
 
-  lv_obj_t* min_label = lv_label_create(minmax_container);
-  lv_obj_set_width(min_label, LV_PCT(100));
-  lv_obj_set_style_text_align(min_label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(min_label, lv_color_white(), 0);
-  lv_obj_set_style_text_font(min_label, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_pad_all(min_label, 0, 0);
-  lv_label_set_text(min_label, "87 / 203");
-
-  // lv_obj_t* max_label = lv_label_create(minmax_container);
-  // lv_obj_set_style_text_color(max_label, lv_color_white(), 0);
-  // lv_obj_set_style_text_font(max_label, &lv_font_montserrat_16, 0);
-  // lv_obj_set_style_pad_all(max_label, 0, 0);
-  // lv_label_set_text(max_label, "203");
+  out.minmax_value = lv_label_create(minmax_container);
+  lv_obj_set_width(out.minmax_value, LV_PCT(100));
+  lv_obj_set_style_text_align(out.minmax_value, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(out.minmax_value, lv_color_white(), 0);
+  lv_obj_set_style_text_font(out.minmax_value, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_pad_all(out.minmax_value, 0, 0);
+  lv_label_set_text(out.minmax_value, minmax_val);
 
   // bar gauge
+
+  out.min_gauge_value = min_gauge_value;
+  out.max_gauge_value = max_gauge_value;
 
   static lv_style_t style_bg;
   static lv_style_t style_indic;
@@ -194,9 +201,9 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
   lv_obj_add_style(bar, &style_indic, LV_PART_INDICATOR);
 
   lv_obj_set_size(bar, LV_PCT(100), 20);
-  lv_bar_set_range(bar, 0, 240);
+  lv_bar_set_range(bar, out.min_gauge_value, out.max_gauge_value);
   lv_obj_center(bar);
-  lv_bar_set_value(bar, 196, LV_ANIM_OFF);
+  lv_bar_set_value(bar, strtol(main_val, NULL, 10), LV_ANIM_OFF);
 
   // gauge scale
 
@@ -220,12 +227,87 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title) {
 
   lv_obj_set_style_length(scale, 3, LV_PART_ITEMS);
   lv_obj_set_style_length(scale, 6, LV_PART_INDICATOR);
-  lv_scale_set_range(scale, 160, 240);
+  lv_scale_set_range(scale, out.min_gauge_value, out.max_gauge_value);
 
   return out;
 }
 
-// then use it
+typedef struct {
+  lv_obj_t* container;
+  lv_obj_t* title;  // title text
+  lv_obj_t* body;   // inner area for metrics
+  lv_obj_t* min_val;
+  lv_obj_t* cur_val;
+  lv_obj_t* max_val;
+} simple_metric_t;
+
+simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
+                                     const char* min_val, const char* cur_val,
+                                     const char* max_val) {
+  simple_metric_t out = {0};
+
+  out.container = lv_obj_create(parent);
+  lv_obj_set_size(out.container, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
+  // Turn off all borders first
+  lv_obj_set_style_border_side(out.container, LV_BORDER_SIDE_NONE, 0);
+  // Enable only the bottom border
+  lv_obj_set_style_border_side(out.container, LV_BORDER_SIDE_BOTTOM, 0);
+  lv_obj_set_style_border_width(out.container, 1, 0);
+  lv_obj_set_style_border_color(
+      out.container, lv_palette_darken(LV_PALETTE_DEEP_ORANGE, 1), 0);
+  lv_obj_set_flex_flow(out.container, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(out.container,
+                        LV_FLEX_ALIGN_START,   // main axis
+                        LV_FLEX_ALIGN_CENTER,  // cross axis
+                        LV_FLEX_ALIGN_START    // track align
+  );
+  lv_obj_set_style_pad_row(out.container, 0, 0);  // spacing between items
+  lv_obj_set_style_pad_all(out.container, 0, 0);
+
+  // title
+  out.title = lv_label_create(out.container);
+  lv_label_set_text(out.title, title ? title : "wthelly");
+  lv_obj_set_width(out.title, LV_PCT(100));
+  lv_obj_set_style_text_align(out.title, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(out.title, lv_color_white(), 0);
+
+  // values
+
+  lv_obj_t* vals_container = lv_obj_create(out.container);
+  lv_obj_set_size(vals_container, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(vals_container, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(vals_container, 0, 0);
+  lv_obj_set_style_border_color(vals_container,
+                                lv_palette_darken(LV_PALETTE_PINK, 1), 0);
+  lv_obj_set_flex_flow(vals_container, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(vals_container,
+                        LV_FLEX_ALIGN_CENTER,  // main axis
+                        LV_FLEX_ALIGN_CENTER,  // cross axis
+                        LV_FLEX_ALIGN_START    // track align
+  );
+  lv_obj_set_style_pad_row(vals_container, 0, 0);  // spacing between items
+  lv_obj_set_style_pad_all(vals_container, 0, 0);
+
+  out.min_val = lv_label_create(vals_container);
+  lv_label_set_text(out.min_val, min_val);
+  lv_obj_set_style_text_color(out.min_val, lv_color_white(), 0);
+  lv_obj_set_flex_grow(out.min_val, 1);
+
+  out.cur_val = lv_label_create(vals_container);
+  lv_label_set_text(out.cur_val, cur_val);
+  lv_obj_set_style_text_font(out.cur_val, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_color(out.cur_val, lv_color_white(), 0);
+
+  out.max_val = lv_label_create(vals_container);
+  lv_label_set_text(out.max_val, max_val);
+  lv_obj_set_style_text_align(out.max_val, LV_TEXT_ALIGN_RIGHT, 0);
+  lv_obj_set_style_text_color(out.max_val, lv_color_white(), 0);
+  lv_obj_set_flex_grow(out.max_val, 1);
+
+  return out;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -328,10 +410,41 @@ void setup() {
   lv_obj_set_style_border_color(row, lv_palette_main(LV_PALETTE_RED), 0);
   lv_obj_set_style_radius(row, 4, 0);
 
-  framed_panel_t water_temp_panel = framed_panel_create(row, "W.TEMP");
-  framed_panel_t oil_temp_panel = framed_panel_create(row, "O.TEMP");
-  framed_panel_t oil_psi_panel = framed_panel_create(row, "O.PSI");
-  // lv_obj_align(test.frame, LV_ALIGN_LEFT_MID, 0, 0);
+  framed_panel_t water_temp_panel =
+      framed_panel_create(row, "W.TEMP", "196", "87 / 206", 160, 220);
+  framed_panel_t oil_temp_panel =
+      framed_panel_create(row, "O.TEMP", "207", "74 / 236", 160, 250);
+  framed_panel_t oil_psi_panel =
+      framed_panel_create(row, "O.PSI", "73", "21 / 93", 0, 100);
+
+  // simple metrics off to the right
+
+  lv_obj_t* col = lv_obj_create(row);
+  lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
+  lv_obj_set_size(col, 180, LV_PCT(100));
+  lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(
+      col,
+      LV_FLEX_ALIGN_SPACE_EVENLY,  // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,        // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START          // track alignment for multi-line rows
+  );
+  lv_obj_set_style_pad_row(col, 0, 0);  // spacing between items
+  lv_obj_set_style_pad_all(col, 0, 0);
+  lv_obj_set_style_pad_left(col, 8, 0);
+  lv_obj_set_style_pad_right(col, 8, 0);
+  lv_obj_set_style_border_width(col, 0, 0);
+  lv_obj_set_style_border_color(col, lv_palette_main(LV_PALETTE_CYAN), 0);
+  lv_obj_set_style_radius(col, 0, 0);
+
+  simple_metric_t afr =
+      simple_metric_create(col, "AFR", "11.1", "14.7", "20.0");
+  simple_metric_t fb_knock =
+      simple_metric_create(col, "FB.KNOCK", "-1.4", "0", "0");
+  simple_metric_t af_correction =
+      simple_metric_create(col, "AF.LEARNED", "-7.5", "-2.0", "3.4");
+  simple_metric_t af_learned =
+      simple_metric_create(col, "DAM", "1.0", "1.0", "1.0");
 
   Serial.println("Setup done");
 }
