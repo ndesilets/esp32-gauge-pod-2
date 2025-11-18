@@ -444,8 +444,10 @@ if __name__ == "__main__":
     address_lookup = init_reference()
 
     # for being lazy
-    trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
+    # trc_path = args.trc if args.trc is not None else "/Users/nic/Downloads/staticreadings/dam-single.trc"
     # trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\static-2\\steering-angle-center-to-left-to-right-to-center.trc"
+    trc_path = args.trc if args.trc is not None else "C:\\Users\\Nic\\Downloads\\staticreadings\\hellyeah.trc"
+
 
     raw_can_messages = parse_canhacker_trc(trc_path)
     isotp_messages = parse_isotp_messages(raw_can_messages)

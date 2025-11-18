@@ -93,6 +93,12 @@ ecu:
       unit: psi
       expr: x*0.01933677
       # raw value is in mmHg
+#  0xff6b1e:
+#    name: "Final Fueling Base" # or Primary Open Loop Map Enrichment
+#    length: 1
+#    value:
+#      unit: multiplier
+#      expr: x*.0625
   0xff6b49:
     name: "DAM"
     length: 1
@@ -104,6 +110,12 @@ ecu:
     length: 2
     value:
       unit: ms 
+      expr: x*.008
+  0xff8482:
+    name: "Fuel Injector #2 Pulse Width"
+    length: 2
+    value:
+      unit: ms
       expr: x*.008
   0xff851c:
     name: "DAM Multiplier"
