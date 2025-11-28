@@ -12,7 +12,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   framed_panel_t out = {0};
 
   out.container = lv_obj_create(parent);
-  lv_obj_set_size(out.container, 148, 172);
+  lv_obj_set_size(out.container, 224, 240);
   lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.container, 0, 0);
   lv_obj_set_style_border_color(out.container, lv_palette_main(LV_PALETTE_CYAN),
@@ -23,7 +23,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_obj_set_style_pad_bottom(out.container, 0, 0);
 
   out.frame = lv_obj_create(out.container);
-  lv_obj_set_size(out.frame, 142, LV_PCT(100));
+  lv_obj_set_size(out.frame, LV_PCT(100), LV_PCT(100));
   lv_obj_set_style_bg_opa(out.frame, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.frame, 3, 0);
   lv_obj_set_style_border_color(out.frame, lv_color_white(), 0);
@@ -35,12 +35,13 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
 
   out.title = lv_label_create(out.container);
   lv_label_set_text(out.title, title ? title : "WTHELLY?");
+  lv_obj_set_style_text_font(out.title, &lv_font_montserrat_18, 0);
   lv_obj_set_style_bg_opa(out.title, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_color(out.title, lv_color_black(), 0);
   lv_obj_set_style_pad_left(out.title, 12, 0);
   lv_obj_set_style_pad_right(out.title, 12, 0);
   lv_obj_set_style_text_color(out.title, lv_color_white(), 0);
-  lv_coord_t lh = lv_font_get_line_height(lv_font_get_default());
+  lv_coord_t lh = lv_font_get_line_height(&lv_font_montserrat_18);
   lv_obj_align_to(out.title, out.frame, LV_ALIGN_OUT_TOP_MID, 0, lh / 2);
 
   out.body = lv_obj_create(out.frame);
@@ -59,15 +60,20 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_obj_set_style_pad_row(out.body, 0, 0);
   lv_obj_align(out.body, LV_ALIGN_CENTER, 0, 8);
 
+  // main val
+
   out.main_value = lv_label_create(out.body);
   lv_obj_set_width(out.main_value, LV_PCT(100));
   lv_obj_set_style_text_color(out.main_value, lv_color_white(), 0);
   lv_obj_set_style_text_align(out.main_value, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(out.main_value, &lv_font_montserrat_44, 0);
+  lv_obj_set_style_text_font(out.main_value, &lv_font_montserrat_48, 0);
+  lv_obj_set_style_pad_top(out.main_value, 4, 0);
   lv_obj_set_style_border_width(out.main_value, 0, 0);
   lv_obj_set_style_border_color(out.main_value,
                                 lv_palette_main(LV_PALETTE_CYAN), 0);
   lv_label_set_text(out.main_value, main_val);
+
+  // min / max
 
   lv_obj_t* minmax_container = lv_obj_create(out.body);
   lv_obj_set_style_bg_opa(minmax_container, LV_OPA_TRANSP, 0);
@@ -80,19 +86,21 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
   lv_obj_set_style_pad_column(minmax_container, 0, 0);
   lv_obj_set_style_pad_all(minmax_container, 0, 0);
-  lv_obj_set_style_pad_top(minmax_container, 4, 0);
-  lv_obj_set_style_pad_bottom(minmax_container, 16, 0);
+  lv_obj_set_style_pad_top(minmax_container, 12, 0);
+  lv_obj_set_style_pad_bottom(minmax_container, 32, 0);
 
   out.minmax_value = lv_label_create(minmax_container);
   lv_obj_set_width(out.minmax_value, LV_PCT(100));
   lv_obj_set_style_text_align(out.minmax_value, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_color(out.minmax_value, lv_color_white(), 0);
-  lv_obj_set_style_text_font(out.minmax_value, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_font(out.minmax_value, &lv_font_montserrat_20, 0);
   lv_obj_set_style_pad_all(out.minmax_value, 0, 0);
   lv_label_set_text(out.minmax_value, minmax_val);
 
   out.min_gauge_value = min_gauge_value;
   out.max_gauge_value = max_gauge_value;
+
+  // bar / scale
 
   static lv_style_t style_bg;
   static lv_style_t style_indic;
@@ -126,6 +134,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_obj_set_style_line_color(scale, lv_color_white(), LV_PART_ITEMS);
   lv_obj_set_style_line_color(scale, lv_color_white(), LV_PART_INDICATOR);
   lv_obj_set_style_text_color(scale, lv_color_white(), LV_PART_INDICATOR);
+  lv_obj_set_style_text_font(scale, &lv_font_montserrat_18, LV_PART_INDICATOR);
 
   lv_obj_set_size(scale, LV_PCT(100), LV_SIZE_CONTENT);
   lv_obj_set_style_pad_left(scale, 8, 0);
@@ -161,9 +170,11 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
   lv_obj_set_style_pad_row(out.container, 0, 0);
   lv_obj_set_style_pad_all(out.container, 0, 0);
+  lv_obj_set_style_pad_bottom(out.container, 4, 0);
 
   out.title = lv_label_create(out.container);
   lv_label_set_text(out.title, title ? title : "wthelly");
+  lv_obj_set_style_text_font(out.title, &lv_font_montserrat_18, 0);
   lv_obj_set_width(out.title, LV_PCT(100));
   lv_obj_set_style_text_align(out.title, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_color(out.title, lv_color_white(), 0);
@@ -179,23 +190,100 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
   lv_obj_set_style_pad_row(vals_container, 0, 0);
   lv_obj_set_style_pad_all(vals_container, 0, 0);
+  lv_obj_set_style_pad_top(vals_container, 4, 0);
 
   out.min_val = lv_label_create(vals_container);
   lv_label_set_text(out.min_val, min_val);
   lv_obj_set_style_text_color(out.min_val, lv_color_white(), 0);
+  lv_obj_set_style_text_font(out.min_val, &lv_font_montserrat_24, 0);
   lv_obj_set_flex_grow(out.min_val, 1);
 
   out.cur_val = lv_label_create(vals_container);
   lv_label_set_text(out.cur_val, cur_val);
-  lv_obj_set_style_text_font(out.cur_val, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_font(out.cur_val, &lv_font_montserrat_30, 0);
   lv_obj_set_style_text_color(out.cur_val, lv_color_white(), 0);
 
   out.max_val = lv_label_create(vals_container);
   lv_label_set_text(out.max_val, max_val);
-  lv_obj_set_style_text_font(out.max_val, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_align(out.max_val, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_style_text_color(out.max_val, lv_color_white(), 0);
+  lv_obj_set_style_text_font(out.max_val, &lv_font_montserrat_24, 0);
   lv_obj_set_flex_grow(out.max_val, 1);
 
   return out;
+}
+
+lv_style_t dd_screen_style;
+lv_style_t dd_flex_row_style;
+lv_style_t dd_flex_col_style;
+
+void dd_init_styles() {
+  // screen
+
+  lv_style_init(&dd_screen_style);
+  lv_style_set_bg_color(&dd_screen_style, lv_color_black());
+  lv_style_set_text_color(&dd_screen_style, lv_color_white());
+  // screen is not exactly centered in bezel
+  lv_style_set_pad_top(&dd_screen_style, 8);
+  lv_style_set_pad_right(&dd_screen_style, 4);
+  lv_style_set_pad_left(&dd_screen_style, 12);
+  lv_style_set_pad_bottom(&dd_screen_style, 8);
+  lv_style_set_border_width(&dd_screen_style, 0);
+
+  // row
+
+  lv_style_init(&dd_flex_row_style);
+  lv_style_set_bg_opa(&dd_flex_row_style, LV_OPA_TRANSP);
+  lv_style_set_pad_column(&dd_flex_row_style, 4);
+  lv_style_set_pad_all(&dd_flex_row_style, 0);
+  lv_style_set_border_width(&dd_flex_row_style, 0);
+  // lv_style_set_border_color(&dd_flex_row_style,
+  //                           lv_palette_main(LV_PALETTE_RED));
+  lv_style_set_radius(&dd_flex_row_style, 4);
+
+  // column
+
+  lv_style_init(&dd_flex_col_style);
+  lv_style_set_bg_opa(&dd_flex_col_style, LV_OPA_TRANSP);
+  lv_style_set_pad_row(&dd_flex_col_style, 0);
+  lv_style_set_pad_all(&dd_flex_col_style, 0);
+  // lv_style_set_pad_left(&dd_flex_col_style, 8);
+  // lv_style_set_pad_right(&dd_flex_col_style, 8);
+  lv_style_set_border_width(&dd_flex_col_style, 0);
+  // lv_style_set_border_color(&dd_flex_col_style,
+  //                           lv_palette_main(LV_PALETTE_CYAN));
+  lv_style_set_radius(&dd_flex_col_style, 0);
+}
+
+void dd_set_screen(lv_obj_t* obj) {
+  lv_obj_add_style(obj, &dd_screen_style, 0);
+  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(
+      obj,
+      LV_FLEX_ALIGN_START,   // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
+}
+
+void dd_set_flex_row(lv_obj_t* obj) {
+  lv_obj_add_style(obj, &dd_flex_row_style, 0);
+  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(
+      obj,
+      LV_FLEX_ALIGN_START,   // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
+}
+
+void dd_set_flex_column(lv_obj_t* obj) {
+  lv_obj_add_style(obj, &dd_flex_col_style, 0);
+  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(
+      obj,
+      LV_FLEX_ALIGN_START,   // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
 }

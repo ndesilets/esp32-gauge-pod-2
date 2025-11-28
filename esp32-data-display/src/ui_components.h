@@ -1,11 +1,6 @@
 #pragma once
 
 #include <lvgl.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct {
   lv_obj_t* container;
   lv_obj_t* frame;
@@ -34,6 +29,7 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
                                      const char* min_val, const char* cur_val,
                                      const char* max_val);
 
-#ifdef __cplusplus
-}
-#endif
+void dd_init_styles();
+void dd_set_screen(lv_obj_t* obj);
+void dd_set_flex_row(lv_obj_t* obj);
+void dd_set_flex_column(lv_obj_t* obj);

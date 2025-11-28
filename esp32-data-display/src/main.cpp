@@ -118,6 +118,9 @@ void setup() {
 
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
   lv_obj_set_style_text_color(lv_screen_active(), lv_color_white(), 0);
+  dd_init_styles();
+
+#ifdef SHOW_BURGER_KING
 
   // best splash animation you could possibly have
 
@@ -146,59 +149,64 @@ void setup() {
   hw_jpeg_deinit();
   lv_obj_del(splash_image);
 
-  // setup main UI
+#endif
 
-  lv_obj_t* row = lv_obj_create(lv_screen_active());
-  lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
-  lv_obj_set_size(row, LV_PCT(100), LV_PCT(100));
-  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(
-      row,
-      LV_FLEX_ALIGN_START,   // main axis (left→right)
-      LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
-      LV_FLEX_ALIGN_START    // track alignment for multi-line rows
-  );
-  lv_obj_set_style_pad_column(row, 4, 0);  // spacing between items
-  lv_obj_set_style_pad_all(row, 0, 0);
-  lv_obj_set_style_border_width(row, 0, 0);
-  lv_obj_set_style_border_color(row, lv_palette_main(LV_PALETTE_RED), 0);
-  lv_obj_set_style_radius(row, 4, 0);
+  // set parent level container
+
+  lv_obj_t* home_screen = lv_obj_create(lv_screen_active());
+  lv_obj_set_size(home_screen, LV_PCT(100), LV_PCT(100));
+  dd_set_screen(home_screen);
+
+  // top row
+
+  lv_obj_t* first_row = lv_obj_create(home_screen);
+  lv_obj_set_size(first_row, LV_PCT(100), 240);
+  dd_set_flex_row(first_row);
+  lv_obj_set_style_pad_column(first_row, 16, 0);
 
   framed_panel_t water_temp_panel =
-      framed_panel_create(row, "W.TEMP", "196", "87 / 206", 160, 220);
+      framed_panel_create(first_row, "W.TEMP", "196", "87 / 206", 160, 220);
   framed_panel_t oil_temp_panel =
-      framed_panel_create(row, "O.TEMP", "207", "74 / 236", 160, 250);
+      framed_panel_create(first_row, "O.TEMP", "217", "74 / 236", 160, 250);
   framed_panel_t oil_psi_panel =
-      framed_panel_create(row, "O.PSI", "73", "21 / 93", 0, 100);
+      framed_panel_create(first_row, "O.PSI", "73", "21 / 93", 0, 100);
 
-  // simple metrics off to the right
+  // second row
 
-  lv_obj_t* col = lv_obj_create(row);
-  lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
-  lv_obj_set_size(col, 180, LV_PCT(100));
-  lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+  lv_obj_t* second_row = lv_obj_create(home_screen);
+  lv_obj_set_size(second_row, LV_PCT(100), 260);
+  dd_set_flex_row(second_row);
   lv_obj_set_flex_align(
-      col,
-      LV_FLEX_ALIGN_SPACE_EVENLY,  // main axis (left→right)
+      second_row,
+      LV_FLEX_ALIGN_SPACE_AROUND,  // main axis (left→right)
       LV_FLEX_ALIGN_CENTER,        // cross axis (top↕bottom)
       LV_FLEX_ALIGN_START          // track alignment for multi-line rows
   );
-  lv_obj_set_style_pad_row(col, 0, 0);  // spacing between items
-  lv_obj_set_style_pad_all(col, 0, 0);
-  lv_obj_set_style_pad_left(col, 8, 0);
-  lv_obj_set_style_pad_right(col, 8, 0);
-  lv_obj_set_style_border_width(col, 0, 0);
-  lv_obj_set_style_border_color(col, lv_palette_main(LV_PALETTE_CYAN), 0);
-  lv_obj_set_style_radius(col, 0, 0);
+  lv_obj_set_style_pad_top(second_row, 16, 0);
+
+  lv_obj_t* left_col = lv_obj_create(second_row);
+  lv_obj_set_size(left_col, LV_PCT(40), LV_PCT(100));
+  dd_set_flex_column(left_col);
+  lv_obj_set_style_pad_row(left_col, 16, 0);
 
   simple_metric_t afr =
-      simple_metric_create(col, "AFR", "11.1", "14.7", "20.0");
-  simple_metric_t fb_knock =
-      simple_metric_create(col, "FB.KNOCK", "-1.4", "0", "0");
-  simple_metric_t af_correction =
-      simple_metric_create(col, "AF.LEARNED", "-7.5", "-2.0", "3.4");
+      simple_metric_create(left_col, "AFR", "11.1", "14.7", "20.0");
   simple_metric_t af_learned =
-      simple_metric_create(col, "DAM", "1.0", "1.0", "1.0");
+      simple_metric_create(left_col, "AF.LEARNED", "-7.5", "-2.0", "3.4");
+  simple_metric_t fb_knock =
+      simple_metric_create(left_col, "FB.KNOCK", "-1.4", "0", "0");
+
+  lv_obj_t* right_col = lv_obj_create(second_row);
+  lv_obj_set_size(right_col, LV_PCT(40), LV_PCT(100));
+  dd_set_flex_column(right_col);
+  lv_obj_set_style_pad_row(right_col, 16, 0);
+
+  simple_metric_t eth_conc =
+      simple_metric_create(right_col, "ETH.CONC", "61.0", "61.0", "61.0");
+  simple_metric_t inj_duty =
+      simple_metric_create(right_col, "INJ.DUTY", "0", "1.63", "79.62");
+  simple_metric_t dam =
+      simple_metric_create(right_col, "DAM", "1.0", "1.0", "1.0");
 
   Serial.println("Setup done");
 }
