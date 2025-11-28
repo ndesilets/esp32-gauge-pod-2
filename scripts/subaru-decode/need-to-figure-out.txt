@@ -1,8 +1,19 @@
     0xff1ee4: 0x2a # greenspeed ethanol conc (value should map to about 50-51%)
-    0xff1ee5: 0xb0 # greenspeed ethanol conc 
+    0xff1ee5: 0xb0 # greenspeed ethanol conc
+        0x2ab0 10928 ~50%
+        0x2ce0 11488 17.5%
+
+
+    0xff1ed2 greenspeed ethanol volts
+    0xff1ed3
     
-    0xff1efa: 0x22 # greenspeed fuel pressure (maybe ~20psi here idr)
-    0xff1efb: 0xb5 # greenspeed fuel pressure
+    0xff1efa: 0x22 # greenspeed fuel pressure final (maybe ~20psi here idr)
+    0xff1efb: 0xb5 # greenspeed fuel pressure final
+        0x2aa0 (24.8-25.1psi)
+
+    0xff1ef8 fuel pressure raw
+    0xff1ef9
+
 
     0xff7f3c: 0x00 # fuel cut flag
 
