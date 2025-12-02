@@ -37,3 +37,4 @@ void dd_init_styles();
 void dd_set_screen(lv_obj_t* obj);
 void dd_set_flex_row(lv_obj_t* obj);
 void dd_set_flex_column(lv_obj_t* obj);
+void dd_set_simple_metric_column(lv_obj_t* col);

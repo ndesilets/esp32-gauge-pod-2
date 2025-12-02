@@ -19,9 +19,6 @@ extern "C" {
 
 #define MAX_TOUCH_POINTS 5
 
-static lv_color_t SubaruReddishOrangeThing = {
-    .blue = 6, .green = 1, .red = 254};
-
 // display
 
 Arduino_ESP32DSIPanel* dsi_panel = new Arduino_ESP32DSIPanel(
@@ -197,39 +194,13 @@ void setup() {
   lv_obj_set_style_pad_top(second_row, 4, 0);
 
   lv_obj_t* left_col = lv_obj_create(second_row);
-  lv_obj_set_size(left_col, LV_PCT(49), LV_PCT(100));
-  dd_set_flex_column(left_col);
-  lv_obj_set_style_pad_row(left_col, 16, 0);
-  lv_obj_set_style_border_side(
-      left_col,
-      (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT |
-                         LV_BORDER_SIDE_RIGHT),
-      0);
-  lv_obj_set_style_radius(left_col, 8, 0);
-  lv_obj_set_style_border_width(left_col, 4, 0);
-  lv_obj_set_style_border_color(left_col, SubaruReddishOrangeThing, 0);
-  lv_obj_set_style_pad_left(left_col, 12, 0);
-  lv_obj_set_style_pad_right(left_col, 12, 0);
-
+  dd_set_simple_metric_column(left_col);
   afr = simple_metric_create(left_col, "AFR", 11.1);
   af_learned = simple_metric_create(left_col, "AF.LEARNED", -7.5);
   fb_knock = simple_metric_create(left_col, "FB.KNOCK", -1.4);
 
   lv_obj_t* right_col = lv_obj_create(second_row);
-  lv_obj_set_size(right_col, LV_PCT(49), LV_PCT(100));
-  dd_set_flex_column(right_col);
-  lv_obj_set_style_pad_row(right_col, 16, 0);
-  lv_obj_set_style_border_side(
-      right_col,
-      (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT |
-                         LV_BORDER_SIDE_RIGHT),
-      0);
-  lv_obj_set_style_radius(right_col, 8, 0);
-  lv_obj_set_style_border_width(right_col, 4, 0);
-  lv_obj_set_style_border_color(right_col, SubaruReddishOrangeThing, 0);
-  lv_obj_set_style_pad_left(right_col, 12, 0);
-  lv_obj_set_style_pad_right(right_col, 12, 0);
-
+  dd_set_simple_metric_column(right_col);
   eth_conc = simple_metric_create(right_col, "ETH.CONC", 61.0);
   inj_duty = simple_metric_create(right_col, "INJ.DUTY", 0);
   dam = simple_metric_create(right_col, "DAM", 1.0);

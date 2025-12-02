@@ -8,6 +8,8 @@
 // Shared accent color derived from Subaru interior lighting
 static lv_color_t SubaruReddishOrangeThing = {
     .blue = 6, .green = 1, .red = 254};
+static lv_color_t SubaruYellowGaugeThing = {
+    .blue = 83, .green = 246, .red = 248};
 
 /*
  * framed panel
@@ -126,7 +128,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_style_init(&style_indic);
   lv_style_set_bg_opa(&style_indic, LV_OPA_COVER);
   lv_style_set_bg_color(&style_indic, lv_color_white());
-  lv_style_set_radius(&style_indic, 4);
+  lv_style_set_radius(&style_indic, 2);
 
   out.bar = lv_bar_create(out.body);
   lv_obj_remove_style_all(out.bar);
@@ -315,4 +317,20 @@ void dd_set_flex_column(lv_obj_t* obj) {
       LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
       LV_FLEX_ALIGN_START    // track alignment for multi-line rows
   );
+}
+
+void dd_set_simple_metric_column(lv_obj_t* col) {
+  lv_obj_set_size(col, LV_PCT(49), LV_PCT(100));
+  dd_set_flex_column(col);
+  lv_obj_set_style_pad_row(col, 16, 0);
+  lv_obj_set_style_border_side(
+      col,
+      (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT |
+                         LV_BORDER_SIDE_RIGHT),
+      0);
+  lv_obj_set_style_radius(col, 8, 0);
+  lv_obj_set_style_border_width(col, 4, 0);
+  lv_obj_set_style_border_color(col, SubaruReddishOrangeThing, 0);
+  lv_obj_set_style_pad_left(col, 12, 0);
+  lv_obj_set_style_pad_right(col, 12, 0);
 }
