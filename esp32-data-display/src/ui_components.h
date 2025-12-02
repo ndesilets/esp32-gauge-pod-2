@@ -8,13 +8,15 @@ typedef struct {
   lv_obj_t* body;
   lv_obj_t* main_value;
   lv_obj_t* minmax_value;
-  int min_gauge_value;
-  int max_gauge_value;
+  lv_obj_t* bar;
+  int min_value;
+  int max_value;
 } framed_panel_t;
 
 framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
-                                   const char* main_val, const char* minmax_val,
-                                   int min_gauge_value, int max_gauge_value);
+                                   int cur_val, int min_bar_value,
+                                   int max_bar_value);
+void framed_panel_update(framed_panel_t* panel, int cur_val);
 
 typedef struct {
   lv_obj_t* container;
@@ -23,11 +25,13 @@ typedef struct {
   lv_obj_t* min_val;
   lv_obj_t* cur_val;
   lv_obj_t* max_val;
+  float min_value;
+  float max_value;
 } simple_metric_t;
 
 simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
-                                     const char* min_val, const char* cur_val,
-                                     const char* max_val);
+                                     float cur_val);
+void simple_metric_update(simple_metric_t* metric, float cur_val);
 
 void dd_init_styles();
 void dd_set_screen(lv_obj_t* obj);

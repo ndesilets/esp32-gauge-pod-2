@@ -1,18 +1,27 @@
 #include "ui_components.h"
 
+#include <algorithm>
 #include <cstdlib>
+
+#include "fonts.h"
 
 // Shared accent color derived from Subaru interior lighting
 static lv_color_t SubaruReddishOrangeThing = {
     .blue = 6, .green = 1, .red = 254};
 
+/*
+ * framed panel
+ */
+
 framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
-                                   const char* main_val, const char* minmax_val,
-                                   int min_gauge_value, int max_gauge_value) {
+                                   int cur_val, int min_bar_value,
+                                   int max_bar_value) {
   framed_panel_t out = {0};
+  out.min_value = cur_val;
+  out.max_value = cur_val;
 
   out.container = lv_obj_create(parent);
-  lv_obj_set_size(out.container, 224, 240);
+  lv_obj_set_size(out.container, 224, 234);
   lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.container, 0, 0);
   lv_obj_set_style_border_color(out.container, lv_palette_main(LV_PALETTE_CYAN),
@@ -66,12 +75,12 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_obj_set_width(out.main_value, LV_PCT(100));
   lv_obj_set_style_text_color(out.main_value, lv_color_white(), 0);
   lv_obj_set_style_text_align(out.main_value, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(out.main_value, &lv_font_montserrat_48, 0);
+  lv_obj_set_style_text_font(out.main_value, &lv_font_montserrat_72, 0);
   lv_obj_set_style_pad_top(out.main_value, 4, 0);
   lv_obj_set_style_border_width(out.main_value, 0, 0);
   lv_obj_set_style_border_color(out.main_value,
                                 lv_palette_main(LV_PALETTE_CYAN), 0);
-  lv_label_set_text(out.main_value, main_val);
+  lv_label_set_text_fmt(out.main_value, "%d", cur_val);
 
   // min / max
 
@@ -86,19 +95,18 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
   lv_obj_set_style_pad_column(minmax_container, 0, 0);
   lv_obj_set_style_pad_all(minmax_container, 0, 0);
-  lv_obj_set_style_pad_top(minmax_container, 12, 0);
-  lv_obj_set_style_pad_bottom(minmax_container, 32, 0);
+  lv_obj_set_style_pad_top(minmax_container, 6, 0);
+  // this is what creates space between min/max and bar
+  lv_obj_set_style_pad_bottom(minmax_container, 24, 0);
 
   out.minmax_value = lv_label_create(minmax_container);
   lv_obj_set_width(out.minmax_value, LV_PCT(100));
   lv_obj_set_style_text_align(out.minmax_value, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_color(out.minmax_value, lv_color_white(), 0);
-  lv_obj_set_style_text_font(out.minmax_value, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(out.minmax_value, &lv_font_montserrat_22, 0);
   lv_obj_set_style_pad_all(out.minmax_value, 0, 0);
-  lv_label_set_text(out.minmax_value, minmax_val);
-
-  out.min_gauge_value = min_gauge_value;
-  out.max_gauge_value = max_gauge_value;
+  lv_label_set_text_fmt(out.minmax_value, "%d / %d", out.min_value,
+                        out.max_value);
 
   // bar / scale
 
@@ -118,17 +126,17 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_style_init(&style_indic);
   lv_style_set_bg_opa(&style_indic, LV_OPA_COVER);
   lv_style_set_bg_color(&style_indic, lv_color_white());
-  lv_style_set_radius(&style_indic, 3);
+  lv_style_set_radius(&style_indic, 4);
 
-  lv_obj_t* bar = lv_bar_create(out.body);
-  lv_obj_remove_style_all(bar);
-  lv_obj_add_style(bar, &style_bg, 0);
-  lv_obj_add_style(bar, &style_indic, LV_PART_INDICATOR);
+  out.bar = lv_bar_create(out.body);
+  lv_obj_remove_style_all(out.bar);
+  lv_obj_add_style(out.bar, &style_bg, 0);
+  lv_obj_add_style(out.bar, &style_indic, LV_PART_INDICATOR);
 
-  lv_obj_set_size(bar, LV_PCT(100), 20);
-  lv_bar_set_range(bar, out.min_gauge_value, out.max_gauge_value);
-  lv_obj_center(bar);
-  lv_bar_set_value(bar, strtol(main_val, NULL, 10), LV_ANIM_OFF);
+  lv_obj_set_size(out.bar, LV_PCT(100) - 8, 24);
+  lv_bar_set_range(out.bar, min_bar_value, max_bar_value);
+  lv_obj_center(out.bar);
+  lv_bar_set_value(out.bar, cur_val, LV_ANIM_OFF);
 
   lv_obj_t* scale = lv_scale_create(out.body);
   lv_obj_set_style_line_color(scale, lv_color_white(), LV_PART_ITEMS);
@@ -137,8 +145,8 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   lv_obj_set_style_text_font(scale, &lv_font_montserrat_18, LV_PART_INDICATOR);
 
   lv_obj_set_size(scale, LV_PCT(100), LV_SIZE_CONTENT);
-  lv_obj_set_style_pad_left(scale, 8, 0);
-  lv_obj_set_style_pad_right(scale, 8, 0);
+  lv_obj_set_style_pad_left(scale, 14, 0);
+  lv_obj_set_style_pad_right(scale, 14, 0);
   lv_scale_set_mode(scale, LV_SCALE_MODE_HORIZONTAL_BOTTOM);
   lv_obj_center(scale);
 
@@ -148,14 +156,27 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
 
   lv_obj_set_style_length(scale, 3, LV_PART_ITEMS);
   lv_obj_set_style_length(scale, 6, LV_PART_INDICATOR);
-  lv_scale_set_range(scale, out.min_gauge_value, out.max_gauge_value);
+  lv_scale_set_range(scale, min_bar_value, max_bar_value);
 
   return out;
 }
 
+void framed_panel_update(framed_panel_t* panel, int gauge_value) {
+  panel->min_value = std::min(panel->min_value, gauge_value);
+  panel->max_value = std::max(panel->max_value, gauge_value);
+
+  lv_label_set_text_fmt(panel->main_value, "%d", gauge_value);
+  lv_label_set_text_fmt(panel->minmax_value, "%d / %d", panel->min_value,
+                        panel->max_value);
+  lv_bar_set_value(panel->bar, gauge_value, LV_ANIM_OFF);
+}
+
+/*
+ * simple metric
+ */
+
 simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
-                                     const char* min_val, const char* cur_val,
-                                     const char* max_val) {
+                                     float cur_val) {
   simple_metric_t out = {0};
 
   out.container = lv_obj_create(parent);
@@ -193,24 +214,32 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title,
   lv_obj_set_style_pad_top(vals_container, 4, 0);
 
   out.min_val = lv_label_create(vals_container);
-  lv_label_set_text(out.min_val, min_val);
+  lv_label_set_text_fmt(out.min_val, "%.1f", cur_val);
   lv_obj_set_style_text_color(out.min_val, lv_color_white(), 0);
   lv_obj_set_style_text_font(out.min_val, &lv_font_montserrat_24, 0);
   lv_obj_set_flex_grow(out.min_val, 1);
 
   out.cur_val = lv_label_create(vals_container);
-  lv_label_set_text(out.cur_val, cur_val);
+  lv_label_set_text_fmt(out.cur_val, "%.1f", cur_val);
   lv_obj_set_style_text_font(out.cur_val, &lv_font_montserrat_30, 0);
   lv_obj_set_style_text_color(out.cur_val, lv_color_white(), 0);
 
   out.max_val = lv_label_create(vals_container);
-  lv_label_set_text(out.max_val, max_val);
+  lv_label_set_text_fmt(out.max_val, "%.1f", cur_val);
   lv_obj_set_style_text_align(out.max_val, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_style_text_color(out.max_val, lv_color_white(), 0);
   lv_obj_set_style_text_font(out.max_val, &lv_font_montserrat_24, 0);
   lv_obj_set_flex_grow(out.max_val, 1);
 
   return out;
+}
+
+void simple_metric_update(simple_metric_t* metric, float gauge_value) {
+  metric->min_value = std::min(metric->min_value, gauge_value);
+  metric->max_value = std::max(metric->max_value, gauge_value);
+  lv_label_set_text_fmt(metric->min_val, "%.1f", metric->min_value);
+  lv_label_set_text_fmt(metric->cur_val, "%.1f", gauge_value);
+  lv_label_set_text_fmt(metric->max_val, "%.1f", metric->max_value);
 }
 
 lv_style_t dd_screen_style;

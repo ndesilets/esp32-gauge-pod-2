@@ -4,7 +4,7 @@
     "extra_flags": [
       "-DBOARD_HAS_PSRAM"
     ],
-    "f_cpu": "360000000L",
+    "f_cpu": "400000000L",
     "f_flash": "80000000L",
     "f_psram": "200000000L",
     "flash_mode": "qio",

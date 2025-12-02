@@ -19,6 +19,9 @@ extern "C" {
 
 #define MAX_TOUCH_POINTS 5
 
+static lv_color_t SubaruReddishOrangeThing = {
+    .blue = 6, .green = 1, .red = 254};
+
 // display
 
 Arduino_ESP32DSIPanel* dsi_panel = new Arduino_ESP32DSIPanel(
@@ -46,6 +49,17 @@ static bool touch_pressed = false;
 static esp_lcd_touch_handle_t tp_handle = NULL;
 
 uint32_t millis_cb(void) { return millis(); }
+
+framed_panel_t water_temp_panel;
+framed_panel_t oil_temp_panel;
+framed_panel_t oil_psi_panel;
+
+simple_metric_t afr;
+simple_metric_t af_learned;
+simple_metric_t fb_knock;
+simple_metric_t eth_conc;
+simple_metric_t inj_duty;
+simple_metric_t dam;
 
 void lv_display_flush(lv_display_t* disp, const lv_area_t* area,
                       uint8_t* px_map) {
@@ -164,55 +178,103 @@ void setup() {
   dd_set_flex_row(first_row);
   lv_obj_set_style_pad_column(first_row, 16, 0);
 
-  framed_panel_t water_temp_panel =
-      framed_panel_create(first_row, "W.TEMP", "196", "87 / 206", 160, 220);
-  framed_panel_t oil_temp_panel =
-      framed_panel_create(first_row, "O.TEMP", "217", "74 / 236", 160, 250);
-  framed_panel_t oil_psi_panel =
-      framed_panel_create(first_row, "O.PSI", "73", "21 / 93", 0, 100);
+  water_temp_panel = framed_panel_create(first_row, "W.TEMP", 87, 160, 220);
+  oil_temp_panel = framed_panel_create(first_row, "O.TEMP", 74, 160, 250);
+  oil_psi_panel = framed_panel_create(first_row, "O.PSI", 21, 0, 100);
 
   // second row
 
   lv_obj_t* second_row = lv_obj_create(home_screen);
-  lv_obj_set_size(second_row, LV_PCT(100), 260);
+  lv_obj_set_size(second_row, LV_PCT(100), 250);
   dd_set_flex_row(second_row);
   lv_obj_set_flex_align(
       second_row,
-      LV_FLEX_ALIGN_SPACE_AROUND,  // main axis (left→right)
-      LV_FLEX_ALIGN_CENTER,        // cross axis (top↕bottom)
-      LV_FLEX_ALIGN_START          // track alignment for multi-line rows
+      // LV_FLEX_ALIGN_SPACE_AROUND,  // main axis (left→right)
+      LV_FLEX_ALIGN_SPACE_BETWEEN,  // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,         // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START           // track alignment for multi-line rows
   );
-  lv_obj_set_style_pad_top(second_row, 16, 0);
+  lv_obj_set_style_pad_top(second_row, 4, 0);
 
   lv_obj_t* left_col = lv_obj_create(second_row);
-  lv_obj_set_size(left_col, LV_PCT(40), LV_PCT(100));
+  lv_obj_set_size(left_col, LV_PCT(49), LV_PCT(100));
   dd_set_flex_column(left_col);
   lv_obj_set_style_pad_row(left_col, 16, 0);
+  lv_obj_set_style_border_side(
+      left_col,
+      (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT |
+                         LV_BORDER_SIDE_RIGHT),
+      0);
+  lv_obj_set_style_radius(left_col, 8, 0);
+  lv_obj_set_style_border_width(left_col, 4, 0);
+  lv_obj_set_style_border_color(left_col, SubaruReddishOrangeThing, 0);
+  lv_obj_set_style_pad_left(left_col, 12, 0);
+  lv_obj_set_style_pad_right(left_col, 12, 0);
 
-  simple_metric_t afr =
-      simple_metric_create(left_col, "AFR", "11.1", "14.7", "20.0");
-  simple_metric_t af_learned =
-      simple_metric_create(left_col, "AF.LEARNED", "-7.5", "-2.0", "3.4");
-  simple_metric_t fb_knock =
-      simple_metric_create(left_col, "FB.KNOCK", "-1.4", "0", "0");
+  afr = simple_metric_create(left_col, "AFR", 11.1);
+  af_learned = simple_metric_create(left_col, "AF.LEARNED", -7.5);
+  fb_knock = simple_metric_create(left_col, "FB.KNOCK", -1.4);
 
   lv_obj_t* right_col = lv_obj_create(second_row);
-  lv_obj_set_size(right_col, LV_PCT(40), LV_PCT(100));
+  lv_obj_set_size(right_col, LV_PCT(49), LV_PCT(100));
   dd_set_flex_column(right_col);
   lv_obj_set_style_pad_row(right_col, 16, 0);
+  lv_obj_set_style_border_side(
+      right_col,
+      (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT |
+                         LV_BORDER_SIDE_RIGHT),
+      0);
+  lv_obj_set_style_radius(right_col, 8, 0);
+  lv_obj_set_style_border_width(right_col, 4, 0);
+  lv_obj_set_style_border_color(right_col, SubaruReddishOrangeThing, 0);
+  lv_obj_set_style_pad_left(right_col, 12, 0);
+  lv_obj_set_style_pad_right(right_col, 12, 0);
 
-  simple_metric_t eth_conc =
-      simple_metric_create(right_col, "ETH.CONC", "61.0", "61.0", "61.0");
-  simple_metric_t inj_duty =
-      simple_metric_create(right_col, "INJ.DUTY", "0", "1.63", "79.62");
-  simple_metric_t dam =
-      simple_metric_create(right_col, "DAM", "1.0", "1.0", "1.0");
+  eth_conc = simple_metric_create(right_col, "ETH.CONC", 61.0);
+  inj_duty = simple_metric_create(right_col, "INJ.DUTY", 0);
+  dam = simple_metric_create(right_col, "DAM", 1.0);
 
   Serial.println("Setup done");
 }
 
+int wrap_range(int counter, int lo, int hi) {
+  if (hi <= lo) {
+    return lo;  // or handle as error
+  }
+  int span = hi - lo + 1;
+  int offset = counter % span;
+  if (offset < 0) {
+    offset += span;  // guard against negative counters
+  }
+  return lo + offset;
+}
+
+float map_sine_to_range(float sine_val, float lo, float hi) {
+  if (hi <= lo) {
+    return lo;  // or handle as error
+  }
+  // sine_val expected in [-1, 1]
+  float normalized = (sine_val + 1.0f) * 0.5f;  // now 0..1
+  return lo + normalized * (hi - lo);
+}
+
+uint i = 0;
 void loop() {
+  framed_panel_update(&water_temp_panel, wrap_range(i, -10, 220));
+  framed_panel_update(&oil_temp_panel, wrap_range(i, -10, 250));
+  framed_panel_update(&oil_psi_panel, wrap_range(i, 0, 100));
+
+  simple_metric_update(&afr, map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0));
+  simple_metric_update(&af_learned,
+                       map_sine_to_range(sinf(i / 50.0f), -10, 10));
+  simple_metric_update(&fb_knock, map_sine_to_range(sinf(i / 50.0f), -4.2, 0));
+
+  simple_metric_update(&eth_conc, map_sine_to_range(sinf(i / 50.0f), 10, 85));
+  simple_metric_update(&inj_duty, map_sine_to_range(sinf(i / 50.0f), 0, 100));
+  simple_metric_update(&dam, map_sine_to_range(sinf(i / 50.0f), 0, 1));
+
   lv_timer_handler();
 
   delay(5);
+  i++;
 }
