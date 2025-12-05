@@ -23,7 +23,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title,
   out.max_value = cur_val;
 
   out.container = lv_obj_create(parent);
-  lv_obj_set_size(out.container, 224, 234);
+  lv_obj_set_size(out.container, 224, 236);
   lv_obj_set_style_bg_opa(out.container, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(out.container, 0, 0);
   lv_obj_set_style_border_color(out.container, lv_palette_main(LV_PALETTE_CYAN),
@@ -320,7 +320,7 @@ void dd_set_flex_column(lv_obj_t* obj) {
 }
 
 void dd_set_simple_metric_column(lv_obj_t* col) {
-  lv_obj_set_size(col, LV_PCT(49), LV_PCT(100));
+  lv_obj_set_size(col, LV_PCT(49), LV_SIZE_CONTENT);
   dd_set_flex_column(col);
   lv_obj_set_style_pad_row(col, 16, 0);
   lv_obj_set_style_border_side(
@@ -331,6 +331,7 @@ void dd_set_simple_metric_column(lv_obj_t* col) {
   lv_obj_set_style_radius(col, 8, 0);
   lv_obj_set_style_border_width(col, 4, 0);
   lv_obj_set_style_border_color(col, SubaruReddishOrangeThing, 0);
-  lv_obj_set_style_pad_left(col, 12, 0);
-  lv_obj_set_style_pad_right(col, 12, 0);
+  lv_obj_set_style_pad_left(col, 16, 0);
+  lv_obj_set_style_pad_right(col, 16, 0);
+  lv_obj_set_style_pad_bottom(col, 20, 0);
 }

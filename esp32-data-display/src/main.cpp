@@ -19,6 +19,9 @@ extern "C" {
 
 #define MAX_TOUCH_POINTS 5
 
+static lv_color_t SubaruReddishOrangeThing = {
+    .blue = 6, .green = 1, .red = 254};
+
 // display
 
 Arduino_ESP32DSIPanel* dsi_panel = new Arduino_ESP32DSIPanel(
@@ -52,11 +55,15 @@ framed_panel_t oil_temp_panel;
 framed_panel_t oil_psi_panel;
 
 simple_metric_t afr;
+simple_metric_t af_correct;
 simple_metric_t af_learned;
 simple_metric_t fb_knock;
 simple_metric_t eth_conc;
 simple_metric_t inj_duty;
 simple_metric_t dam;
+simple_metric_t iat;
+
+// lvgl display and touch read callbacks
 
 void lv_display_flush(lv_display_t* disp, const lv_area_t* area,
                       uint8_t* px_map) {
@@ -81,6 +88,18 @@ void lv_touch_read(lv_indev_t* indev, lv_indev_data_t* data) {
     data->state = LV_INDEV_STATE_RELEASED;
   }
 }
+
+// lvgl handlers
+
+void handle_reset_button(lv_event_t* e) {
+  lv_event_code_t code = lv_event_get_code(e);
+
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    // esp_restart();
+  }
+}
+
+// arduino stuff
 
 void setup() {
   Serial.begin(115200);
@@ -107,10 +126,36 @@ void setup() {
   lv_init();
   lv_tick_set_cb(millis_cb);
 
+  // size_t draw_buf_size =
+  //     (display_cfg.width * display_cfg.height / 10) * sizeof(lv_color_t);
+  // fb1 = (uint16_t*)heap_caps_malloc(draw_buf_size, MALLOC_CAP_DMA);
+  // fb2 = (uint16_t*)heap_caps_malloc(draw_buf_size, MALLOC_CAP_DMA);
+
+  // disp = lv_display_create(display_cfg.height, display_cfg.width);
+  // lv_display_set_default(disp);
+  // lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
+  // lv_display_set_buffers(disp, fb1, fb2, draw_buf_size,
+  //                        LV_DISPLAY_RENDER_MODE_PARTIAL);
+  // lv_display_set_flush_cb(disp, lv_display_flush);
+
+  // size_t draw_buf_size =
+  //     display_cfg.width * display_cfg.height * sizeof(lv_color_t);
+  // fb1 = (uint16_t*)heap_caps_malloc(draw_buf_size,
+  //                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA);
+
+  // disp = lv_display_create(display_cfg.height, display_cfg.width);
+  // lv_display_set_default(disp);
+  // lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
+  // lv_display_set_buffers(disp, fb1, NULL, draw_buf_size,
+  //                        LV_DISPLAY_RENDER_MODE_FULL);
+  // lv_display_set_flush_cb(disp, lv_display_flush);
+
   size_t draw_buf_size =
-      (display_cfg.width * display_cfg.height / 10) * sizeof(lv_color_t);
-  fb1 = (uint16_t*)heap_caps_malloc(draw_buf_size, MALLOC_CAP_DMA);
-  fb2 = (uint16_t*)heap_caps_malloc(draw_buf_size, MALLOC_CAP_DMA);
+      (display_cfg.width * display_cfg.height) * sizeof(lv_color_t);
+  fb1 = (uint16_t*)heap_caps_malloc(draw_buf_size,
+                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA);
+  fb2 = (uint16_t*)heap_caps_malloc(draw_buf_size,
+                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA);
 
   disp = lv_display_create(display_cfg.height, display_cfg.width);
   lv_display_set_default(disp);
@@ -182,7 +227,7 @@ void setup() {
   // second row
 
   lv_obj_t* second_row = lv_obj_create(home_screen);
-  lv_obj_set_size(second_row, LV_PCT(100), 250);
+  lv_obj_set_size(second_row, LV_PCT(100), LV_SIZE_CONTENT);
   dd_set_flex_row(second_row);
   lv_obj_set_flex_align(
       second_row,
@@ -195,15 +240,62 @@ void setup() {
 
   lv_obj_t* left_col = lv_obj_create(second_row);
   dd_set_simple_metric_column(left_col);
-  afr = simple_metric_create(left_col, "AFR", 11.1);
+  dam = simple_metric_create(left_col, "DAM", 1.0);
   af_learned = simple_metric_create(left_col, "AF.LEARNED", -7.5);
-  fb_knock = simple_metric_create(left_col, "FB.KNOCK", -1.4);
+  afr = simple_metric_create(left_col, "AF.RATIO", 11.1);
+  iat = simple_metric_create(left_col, "INT.TEMP", 67.9);
 
   lv_obj_t* right_col = lv_obj_create(second_row);
   dd_set_simple_metric_column(right_col);
+  fb_knock = simple_metric_create(right_col, "FB.KNOCK", -1.4);
+  af_correct = simple_metric_create(right_col, "AF.CORRECT", -7.5);
+  inj_duty = simple_metric_create(right_col, "INJ.DUTY", 1.11);
   eth_conc = simple_metric_create(right_col, "ETH.CONC", 61.0);
-  inj_duty = simple_metric_create(right_col, "INJ.DUTY", 0);
-  dam = simple_metric_create(right_col, "DAM", 1.0);
+
+  // third row
+
+  lv_obj_t* third_row = lv_obj_create(home_screen);
+  lv_obj_set_size(third_row, LV_PCT(100), LV_SIZE_CONTENT);
+  dd_set_flex_row(third_row);
+  lv_obj_set_flex_align(
+      third_row,
+      LV_FLEX_ALIGN_SPACE_BETWEEN,  // main axis (left→right)
+      LV_FLEX_ALIGN_CENTER,         // cross axis (top↕bottom)
+      LV_FLEX_ALIGN_START           // track alignment for multi-line rows
+  );
+  lv_obj_set_style_border_side(
+      third_row,
+      (lv_border_side_t)(LV_BORDER_SIDE_TOP | LV_BORDER_SIDE_LEFT |
+                         LV_BORDER_SIDE_RIGHT),
+      0);
+  lv_obj_set_style_radius(third_row, 8, 0);
+  lv_obj_set_style_border_width(third_row, 4, 0);
+  lv_obj_set_style_border_color(third_row, SubaruReddishOrangeThing, 0);
+  lv_obj_set_style_pad_top(third_row, 12, 0);
+  lv_obj_set_style_pad_left(third_row, 12, 0);
+  lv_obj_set_style_pad_right(third_row, 12, 0);
+
+  // reset button
+
+  lv_obj_t* reset_button = lv_btn_create(third_row);
+  lv_obj_set_size(reset_button, 220, 100);
+  lv_obj_set_style_pad_top(reset_button, 12, 0);
+  lv_obj_remove_flag(reset_button, LV_OBJ_FLAG_PRESS_LOCK);
+
+  lv_obj_t* reset_label = lv_label_create(reset_button);
+  lv_label_set_text(reset_label, "RESET");
+  lv_obj_center(reset_label);
+
+  // record button
+
+  lv_obj_t* record_button = lv_btn_create(third_row);
+  lv_obj_set_size(record_button, 220, 100);
+  lv_obj_remove_flag(record_button, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_add_flag(record_button, LV_OBJ_FLAG_CHECKABLE);
+
+  lv_obj_t* record_label = lv_label_create(record_button);
+  lv_label_set_text(record_label, "RECORD");
+  lv_obj_center(record_label);
 
   Serial.println("Setup done");
 }
@@ -235,14 +327,16 @@ void loop() {
   framed_panel_update(&oil_temp_panel, wrap_range(i, -10, 250));
   framed_panel_update(&oil_psi_panel, wrap_range(i, 0, 100));
 
-  simple_metric_update(&afr, map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0));
-  simple_metric_update(&af_learned,
-                       map_sine_to_range(sinf(i / 50.0f), -10, 10));
-  simple_metric_update(&fb_knock, map_sine_to_range(sinf(i / 50.0f), -4.2, 0));
+  // simple_metric_update(&afr, map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0));
+  // simple_metric_update(&af_learned,
+  //                      map_sine_to_range(sinf(i / 50.0f), -10, 10));
+  // simple_metric_update(&fb_knock, map_sine_to_range(sinf(i / 50.0f), -4.2,
+  // 0));
 
-  simple_metric_update(&eth_conc, map_sine_to_range(sinf(i / 50.0f), 10, 85));
-  simple_metric_update(&inj_duty, map_sine_to_range(sinf(i / 50.0f), 0, 100));
-  simple_metric_update(&dam, map_sine_to_range(sinf(i / 50.0f), 0, 1));
+  // simple_metric_update(&eth_conc, map_sine_to_range(sinf(i / 50.0f), 10,
+  // 85)); simple_metric_update(&inj_duty, map_sine_to_range(sinf(i / 50.0f), 0,
+  // 100)); simple_metric_update(&dam, map_sine_to_range(sinf(i / 50.0f), 0,
+  // 1));
 
   lv_timer_handler();
 
