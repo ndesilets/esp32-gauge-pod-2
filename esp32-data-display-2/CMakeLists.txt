@@ -13,4 +13,4 @@ project(lvgl_demo_v9)
 
 # Build LittleFS image from assets and flash it with the project
 include(${CMAKE_CURRENT_LIST_DIR}/managed_components/joltwallet__littlefs/project_include.cmake)
-littlefs_create_partition_image(storage ${CMAKE_CURRENT_LIST_DIR}/assets/jpegs)
+littlefs_create_partition_image(storage ${CMAKE_CURRENT_LIST_DIR}/assets)

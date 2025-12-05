@@ -16,9 +16,10 @@ static lv_color_t SubaruYellowGaugeThing = {.blue = 83, .green = 246, .red = 248
 lv_style_t dd_screen_style;
 lv_style_t dd_flex_row_style;
 lv_style_t dd_flex_col_style;
+lv_style_t button_style;
 
 void dd_init_styles() {
-  // screen
+  // --- screen
 
   lv_style_init(&dd_screen_style);
   lv_style_set_bg_color(&dd_screen_style, lv_color_black());
@@ -30,7 +31,7 @@ void dd_init_styles() {
   lv_style_set_pad_bottom(&dd_screen_style, 8);
   // lv_style_set_pad_all(&dd_screen_style, 0);
 
-  // row
+  // --- row
 
   lv_style_init(&dd_flex_row_style);
   lv_style_set_bg_opa(&dd_flex_row_style, LV_OPA_TRANSP);
@@ -41,7 +42,7 @@ void dd_init_styles() {
   //                           lv_palette_main(LV_PALETTE_RED));
   lv_style_set_radius(&dd_flex_row_style, 4);
 
-  // column
+  // --- column
 
   lv_style_init(&dd_flex_col_style);
   lv_style_set_bg_opa(&dd_flex_col_style, LV_OPA_TRANSP);
@@ -53,6 +54,19 @@ void dd_init_styles() {
   // lv_style_set_border_color(&dd_flex_col_style,
   //                           lv_palette_main(LV_PALETTE_CYAN));
   lv_style_set_radius(&dd_flex_col_style, 0);
+
+  // --- button
+
+  // normal button style
+  lv_style_init(&button_style);
+  lv_style_set_radius(&button_style, 3);
+  lv_style_set_bg_opa(&button_style, LV_OPA_TRANSP);
+  lv_style_set_bg_color(&button_style, lv_color_black());
+
+  lv_style_set_border_opa(&button_style, LV_OPA_COVER);
+  lv_style_set_border_width(&button_style, 2);
+  lv_style_set_border_color(&button_style, lv_color_white());
+  // pressed button style
 }
 
 void dd_set_screen(lv_obj_t* obj) {
@@ -122,7 +136,9 @@ void dd_set_framed_controls_row(lv_obj_t* obj) {
 }
 
 void dd_set_action_button(lv_obj_t* btn, const char* label) {
-  lv_obj_set_size(btn, 220, 80);
+  lv_obj_remove_style_all(btn);
+  lv_obj_add_style(btn, &button_style, 0);
+  lv_obj_set_size(btn, 220, 90);
   lv_obj_remove_flag(btn, LV_OBJ_FLAG_PRESS_LOCK);
   lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
 

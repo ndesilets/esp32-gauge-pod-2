@@ -1,12 +1,20 @@
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "bsp/display.h"
 #include "bsp/esp-bsp.h"
 #include "bsp_board_extra.h"
+#include "driver/i2s_std.h"
 #include "driver/jpeg_decode.h"
 #include "esp_check.h"
+#include "esp_codec_dev.h"
 #include "esp_err.h"
 #include "esp_littlefs.h"
 #include "esp_log.h"
 #include "esp_memory_utils.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hw_jpeg.h"
@@ -33,6 +41,7 @@ simple_metric_t eth_conc;
 simple_metric_t inj_duty;
 simple_metric_t dam;
 simple_metric_t iat;
+static esp_codec_dev_handle_t codec_dev = NULL;
 
 // ====== util functions =======
 
@@ -62,6 +71,12 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
 void extremely_awesome_splash_screen() {
   // best splash animation you could possibly have
 
+  // playback audio
+
+  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+
+  // playback video
+
   size_t MAX_JPEG_SIZE = 70 * 1024;  // ~70kB
   if (!hw_jpeg_init(MAX_JPEG_SIZE, 720, 720)) {
     printf("HW JPEG init failed\n");
@@ -75,7 +90,7 @@ void extremely_awesome_splash_screen() {
 
   for (int i = 0; i < 73; i++) {
     char filename[40];
-    snprintf(filename, sizeof(filename), "/storage/bklogo00108%03d.jpg", i);
+    snprintf(filename, sizeof(filename), "/storage/jpegs/bklogo00108%03d.jpg", i);
 
     hw_jpeg_decode_file_to_lvimg(filename, &splash_frame_dsc);
     lv_image_set_src(splash_image, &splash_frame_dsc);
@@ -90,6 +105,21 @@ void extremely_awesome_splash_screen() {
 }
 
 // ====== sys level stuff =======
+
+static void init_littlefs(void) {
+  esp_vfs_littlefs_conf_t conf = {
+      .base_path = "/littlefs",
+      .partition_label = "littlefs",
+      .format_if_mount_failed = true,
+      .dont_mount = false,
+  };
+  esp_err_t ret = esp_vfs_littlefs_register(&conf);
+
+  if (ret != ESP_OK) {
+    ESP_LOGE("FS", "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
+    return;
+  }
+}
 
 static void telemetry_task(void* arg) {
   int i = 0;
@@ -114,24 +144,12 @@ static void telemetry_task(void* arg) {
   }
 }
 
-static void init_littlefs(void) {
-  esp_vfs_littlefs_conf_t conf = {
-      .base_path = "/littlefs",
-      .partition_label = "littlefs",
-      .format_if_mount_failed = true,
-      .dont_mount = false,
-  };
-  esp_err_t ret = esp_vfs_littlefs_register(&conf);
-
-  if (ret != ESP_OK) {
-    ESP_LOGE("FS", "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
-    return;
-  }
-}
-
 // ====== main =======
 
 void app_main(void) {
+  ESP_ERROR_CHECK(bsp_extra_codec_init());
+  ESP_ERROR_CHECK(bsp_extra_player_init());
+
   // --- init display
 
   bsp_display_cfg_t cfg = {.lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
