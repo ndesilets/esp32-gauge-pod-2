@@ -34,6 +34,8 @@ simple_metric_t inj_duty;
 simple_metric_t dam;
 simple_metric_t iat;
 
+// ====== util functions =======
+
 int wrap_range(int counter, int lo, int hi) {
   if (hi <= lo) {
     return lo;  // or handle as error
@@ -54,6 +56,40 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
   float normalized = (sine_val + 1.0f) * 0.5f;  // now 0..1
   return lo + normalized * (hi - lo);
 }
+
+// ====== ui  stuff =======
+
+void extremely_awesome_splash_screen() {
+  // best splash animation you could possibly have
+
+  size_t MAX_JPEG_SIZE = 70 * 1024;  // ~70kB
+  if (!hw_jpeg_init(MAX_JPEG_SIZE, 720, 720)) {
+    printf("HW JPEG init failed\n");
+    return;
+  }
+
+  lv_obj_t* splash_image = lv_image_create(lv_screen_active());
+  lv_obj_set_size(splash_image, lv_pct(100), lv_pct(100));
+  lv_image_set_scale(splash_image, LV_SCALE_NONE);  // no scaling distortion
+  static lv_image_dsc_t splash_frame_dsc;
+
+  for (int i = 0; i < 73; i++) {
+    char filename[40];
+    snprintf(filename, sizeof(filename), "/storage/bklogo00108%03d.jpg", i);
+
+    hw_jpeg_decode_file_to_lvimg(filename, &splash_frame_dsc);
+    lv_image_set_src(splash_image, &splash_frame_dsc);
+    lv_timer_handler();
+  }
+
+  // let last frame persist for a bit
+  vTaskDelay(pdMS_TO_TICKS(1500));
+
+  hw_jpeg_deinit();
+  lv_obj_del(splash_image);
+}
+
+// ====== sys level stuff =======
 
 static void telemetry_task(void* arg) {
   int i = 0;
@@ -93,23 +129,25 @@ static void init_littlefs(void) {
   }
 }
 
+// ====== main =======
+
 void app_main(void) {
-  // init display
+  // --- init display
 
   bsp_display_cfg_t cfg = {.lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-                           // .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
-                           .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
-                           .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
+                           .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
+                           //  .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
+                           .double_buffer = true,
                            .flags = {
                                .buff_dma = true,
-                               .buff_spiram = true,
+                               .buff_spiram = false,
                                .sw_rotate = false,
                            }};
   bsp_display_start_with_config(&cfg);
   bsp_display_backlight_on();
   bsp_display_brightness_set(50);
 
-  // init littlefs
+  // --- init littlefs
 
   esp_vfs_littlefs_conf_t littlefs_conf = {
       .base_path = "/storage", .partition_label = NULL, .format_if_mount_failed = true};
@@ -124,6 +162,8 @@ void app_main(void) {
     }
     return;
   }
+
+  // --- init UI
 
   // need to lock to build UI in thread safe manner
   bsp_display_lock(0);
@@ -140,34 +180,7 @@ void app_main(void) {
   lv_display_t* disp = lv_display_get_default();
   lv_display_set_offset(disp, 0, 0);
 
-  // best splash animation you could possibly have
-
-  size_t MAX_JPEG_SIZE = 70 * 1024;  // ~70kB
-  if (!hw_jpeg_init(MAX_JPEG_SIZE, 720, 720)) {
-    printf("HW JPEG init failed\n");
-    return;
-  }
-
-  lv_obj_t* splash_image = lv_image_create(lv_screen_active());
-  lv_obj_set_size(splash_image, lv_pct(100), lv_pct(100));
-  lv_image_set_scale(splash_image, LV_SCALE_NONE);  // no scaling distortion
-  static lv_image_dsc_t splash_frame_dsc;
-
-  for (int i = 0; i < 73; i++) {
-    char filename[40];
-    snprintf(filename, sizeof(filename), "/storage/bklogo00108%03d.jpg", i);
-
-    hw_jpeg_decode_file_to_lvimg(filename, &splash_frame_dsc);
-    lv_image_set_src(splash_image, &splash_frame_dsc);
-    lv_timer_handler();
-  }
-
-  vTaskDelay(pdMS_TO_TICKS(1500));
-
-  hw_jpeg_deinit();
-  lv_obj_del(splash_image);
-
-  // stuff
+  extremely_awesome_splash_screen();
 
   // set parent level container
 
@@ -218,48 +231,17 @@ void app_main(void) {
   // --- third row
 
   lv_obj_t* third_row = lv_obj_create(home_screen);
-  lv_obj_set_size(third_row, LV_PCT(100), LV_SIZE_CONTENT);
-  dd_set_flex_row(third_row);
-  lv_obj_set_flex_align(third_row,
-                        LV_FLEX_ALIGN_SPACE_BETWEEN,  // main axis (left→right)
-                        LV_FLEX_ALIGN_CENTER,         // cross axis (top↕bottom)
-                        LV_FLEX_ALIGN_START           // track alignment for multi-line rows
-  );
-  lv_obj_set_style_border_side(third_row,
-                               (lv_border_side_t)(LV_BORDER_SIDE_TOP | LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT), 0);
-  lv_obj_set_style_radius(third_row, 8, 0);
-  lv_obj_set_style_border_width(third_row, 4, 0);
-  lv_obj_set_style_border_color(third_row, SubaruReddishOrangeThing, 0);
-  lv_obj_set_style_pad_top(third_row, 12, 0);
-  lv_obj_set_style_pad_left(third_row, 12, 0);
-  lv_obj_set_style_pad_right(third_row, 12, 0);
-
-  // reset button
+  dd_set_framed_controls_row(third_row);
 
   lv_obj_t* reset_button = lv_btn_create(third_row);
-  lv_obj_set_size(reset_button, 220, 100);
-  lv_obj_set_style_pad_top(reset_button, 12, 0);
-  lv_obj_remove_flag(reset_button, LV_OBJ_FLAG_PRESS_LOCK);
-
-  lv_obj_t* reset_label = lv_label_create(reset_button);
-  lv_label_set_text(reset_label, "RESET");
-  lv_obj_center(reset_label);
-
-  // record button
+  dd_set_action_button(reset_button, "RESET");
 
   lv_obj_t* record_button = lv_btn_create(third_row);
-  lv_obj_set_size(record_button, 220, 100);
-  lv_obj_remove_flag(record_button, LV_OBJ_FLAG_PRESS_LOCK);
-  lv_obj_add_flag(record_button, LV_OBJ_FLAG_CHECKABLE);
+  dd_set_action_button(record_button, "RECORD");
 
-  lv_obj_t* record_label = lv_label_create(record_button);
-  lv_label_set_text(record_label, "RECORD");
-  lv_obj_center(record_label);
-
-  // done
+  // --- everything else
 
   bsp_display_unlock();
 
-  // main loop
   xTaskCreate(telemetry_task, "telemetry", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
 }

@@ -12,10 +12,6 @@ typedef struct {
   int max_value;
 } framed_panel_t;
 
-framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_val, int min_bar_value,
-                                   int max_bar_value);
-void framed_panel_update(framed_panel_t* panel, int cur_val);
-
 typedef struct {
   lv_obj_t* container;
   lv_obj_t* title;
@@ -27,11 +23,21 @@ typedef struct {
   float max_value;
 } simple_metric_t;
 
-simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title, float cur_val);
-void simple_metric_update(simple_metric_t* metric, float cur_val);
-
+// --- general purpose stuff
 void dd_init_styles();
 void dd_set_screen(lv_obj_t* obj);
 void dd_set_flex_row(lv_obj_t* obj);
 void dd_set_flex_column(lv_obj_t* obj);
+
+// --- ui components
 void dd_set_simple_metric_column(lv_obj_t* col);
+void dd_set_framed_controls_row(lv_obj_t* obj);
+void dd_set_action_button(lv_obj_t* btn, const char* label);
+
+// --- gauge components
+framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_val, int min_bar_value,
+                                   int max_bar_value);
+void framed_panel_update(framed_panel_t* panel, int cur_val);
+
+simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title, float cur_val);
+void simple_metric_update(simple_metric_t* metric, float cur_val);

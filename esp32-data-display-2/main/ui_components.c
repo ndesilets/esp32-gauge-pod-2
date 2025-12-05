@@ -9,6 +9,132 @@
 static lv_color_t SubaruReddishOrangeThing = {.blue = 6, .green = 1, .red = 254};
 static lv_color_t SubaruYellowGaugeThing = {.blue = 83, .green = 246, .red = 248};
 
+// ====================================================================================================================
+// general purpose stuff
+// ====================================================================================================================
+
+lv_style_t dd_screen_style;
+lv_style_t dd_flex_row_style;
+lv_style_t dd_flex_col_style;
+
+void dd_init_styles() {
+  // screen
+
+  lv_style_init(&dd_screen_style);
+  lv_style_set_bg_color(&dd_screen_style, lv_color_black());
+  lv_style_set_text_color(&dd_screen_style, lv_color_white());
+  // screen is not exactly centered in bezel
+  lv_style_set_pad_top(&dd_screen_style, 8);
+  lv_style_set_pad_right(&dd_screen_style, 4);
+  lv_style_set_pad_left(&dd_screen_style, 12);
+  lv_style_set_pad_bottom(&dd_screen_style, 8);
+  // lv_style_set_pad_all(&dd_screen_style, 0);
+
+  // row
+
+  lv_style_init(&dd_flex_row_style);
+  lv_style_set_bg_opa(&dd_flex_row_style, LV_OPA_TRANSP);
+  lv_style_set_pad_column(&dd_flex_row_style, 4);
+  lv_style_set_pad_all(&dd_flex_row_style, 0);
+  lv_style_set_border_width(&dd_flex_row_style, 0);
+  // lv_style_set_border_color(&dd_flex_row_style,
+  //                           lv_palette_main(LV_PALETTE_RED));
+  lv_style_set_radius(&dd_flex_row_style, 4);
+
+  // column
+
+  lv_style_init(&dd_flex_col_style);
+  lv_style_set_bg_opa(&dd_flex_col_style, LV_OPA_TRANSP);
+  lv_style_set_pad_row(&dd_flex_col_style, 0);
+  lv_style_set_pad_all(&dd_flex_col_style, 0);
+  // lv_style_set_pad_left(&dd_flex_col_style, 8);
+  // lv_style_set_pad_right(&dd_flex_col_style, 8);
+  lv_style_set_border_width(&dd_flex_col_style, 0);
+  // lv_style_set_border_color(&dd_flex_col_style,
+  //                           lv_palette_main(LV_PALETTE_CYAN));
+  lv_style_set_radius(&dd_flex_col_style, 0);
+}
+
+void dd_set_screen(lv_obj_t* obj) {
+  lv_obj_add_style(obj, &dd_screen_style, 0);
+  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(obj,
+                        LV_FLEX_ALIGN_START,   // main axis (left→right)
+                        LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+                        LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
+}
+
+void dd_set_flex_row(lv_obj_t* obj) {
+  lv_obj_add_style(obj, &dd_flex_row_style, 0);
+  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(obj,
+                        LV_FLEX_ALIGN_START,   // main axis (left→right)
+                        LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+                        LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
+}
+
+void dd_set_flex_column(lv_obj_t* obj) {
+  lv_obj_add_style(obj, &dd_flex_col_style, 0);
+  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(obj,
+                        LV_FLEX_ALIGN_START,   // main axis (left→right)
+                        LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
+                        LV_FLEX_ALIGN_START    // track alignment for multi-line rows
+  );
+}
+
+// ====================================================================================================================
+// ui components
+// ====================================================================================================================
+
+void dd_set_simple_metric_column(lv_obj_t* col) {
+  lv_obj_set_size(col, LV_PCT(49), LV_SIZE_CONTENT);
+  dd_set_flex_column(col);
+  lv_obj_set_style_pad_row(col, 16, 0);
+  lv_obj_set_style_border_side(
+      col, (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT), 0);
+  lv_obj_set_style_radius(col, 8, 0);
+  lv_obj_set_style_border_width(col, 4, 0);
+  lv_obj_set_style_border_color(col, SubaruReddishOrangeThing, 0);
+  lv_obj_set_style_pad_left(col, 16, 0);
+  lv_obj_set_style_pad_right(col, 16, 0);
+  lv_obj_set_style_pad_bottom(col, 20, 0);
+}
+
+void dd_set_framed_controls_row(lv_obj_t* obj) {
+  lv_obj_set_size(obj, LV_PCT(100), LV_SIZE_CONTENT);
+  dd_set_flex_row(obj);
+  lv_obj_set_flex_align(obj,
+                        LV_FLEX_ALIGN_SPACE_BETWEEN,  // main axis (left→right)
+                        LV_FLEX_ALIGN_CENTER,         // cross axis (top↕bottom)
+                        LV_FLEX_ALIGN_START           // track alignment for multi-line rows
+  );
+  lv_obj_set_style_border_side(obj, (lv_border_side_t)(LV_BORDER_SIDE_TOP | LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT),
+                               0);
+  lv_obj_set_style_radius(obj, 8, 0);
+  lv_obj_set_style_border_width(obj, 4, 0);
+  lv_obj_set_style_border_color(obj, SubaruReddishOrangeThing, 0);
+  lv_obj_set_style_pad_top(obj, 12, 0);
+  lv_obj_set_style_pad_left(obj, 12, 0);
+  lv_obj_set_style_pad_right(obj, 12, 0);
+}
+
+void dd_set_action_button(lv_obj_t* btn, const char* label) {
+  lv_obj_set_size(btn, 220, 80);
+  lv_obj_remove_flag(btn, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
+
+  lv_obj_t* record_label = lv_label_create(btn);
+  lv_label_set_text(record_label, label);
+  lv_obj_center(record_label);
+}
+
+// ====================================================================================================================
+// gauge components
+// ====================================================================================================================
+
 /*
  * framed panel
  */
@@ -228,90 +354,4 @@ void simple_metric_update(simple_metric_t* metric, float gauge_value) {
   lv_label_set_text_fmt(metric->min_val, "%.1f", metric->min_value);
   lv_label_set_text_fmt(metric->cur_val, "%.1f", gauge_value);
   lv_label_set_text_fmt(metric->max_val, "%.1f", metric->max_value);
-}
-
-lv_style_t dd_screen_style;
-lv_style_t dd_flex_row_style;
-lv_style_t dd_flex_col_style;
-
-void dd_init_styles() {
-  // screen
-
-  lv_style_init(&dd_screen_style);
-  lv_style_set_bg_color(&dd_screen_style, lv_color_black());
-  lv_style_set_text_color(&dd_screen_style, lv_color_white());
-  // screen is not exactly centered in bezel
-  lv_style_set_pad_top(&dd_screen_style, 8);
-  lv_style_set_pad_right(&dd_screen_style, 4);
-  lv_style_set_pad_left(&dd_screen_style, 12);
-  lv_style_set_pad_bottom(&dd_screen_style, 8);
-  // lv_style_set_pad_all(&dd_screen_style, 0);
-
-  // row
-
-  lv_style_init(&dd_flex_row_style);
-  lv_style_set_bg_opa(&dd_flex_row_style, LV_OPA_TRANSP);
-  lv_style_set_pad_column(&dd_flex_row_style, 4);
-  lv_style_set_pad_all(&dd_flex_row_style, 0);
-  lv_style_set_border_width(&dd_flex_row_style, 0);
-  // lv_style_set_border_color(&dd_flex_row_style,
-  //                           lv_palette_main(LV_PALETTE_RED));
-  lv_style_set_radius(&dd_flex_row_style, 4);
-
-  // column
-
-  lv_style_init(&dd_flex_col_style);
-  lv_style_set_bg_opa(&dd_flex_col_style, LV_OPA_TRANSP);
-  lv_style_set_pad_row(&dd_flex_col_style, 0);
-  lv_style_set_pad_all(&dd_flex_col_style, 0);
-  // lv_style_set_pad_left(&dd_flex_col_style, 8);
-  // lv_style_set_pad_right(&dd_flex_col_style, 8);
-  lv_style_set_border_width(&dd_flex_col_style, 0);
-  // lv_style_set_border_color(&dd_flex_col_style,
-  //                           lv_palette_main(LV_PALETTE_CYAN));
-  lv_style_set_radius(&dd_flex_col_style, 0);
-}
-
-void dd_set_screen(lv_obj_t* obj) {
-  lv_obj_add_style(obj, &dd_screen_style, 0);
-  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(obj,
-                        LV_FLEX_ALIGN_START,   // main axis (left→right)
-                        LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
-                        LV_FLEX_ALIGN_START    // track alignment for multi-line rows
-  );
-}
-
-void dd_set_flex_row(lv_obj_t* obj) {
-  lv_obj_add_style(obj, &dd_flex_row_style, 0);
-  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(obj,
-                        LV_FLEX_ALIGN_START,   // main axis (left→right)
-                        LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
-                        LV_FLEX_ALIGN_START    // track alignment for multi-line rows
-  );
-}
-
-void dd_set_flex_column(lv_obj_t* obj) {
-  lv_obj_add_style(obj, &dd_flex_col_style, 0);
-  lv_obj_set_flex_flow(obj, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(obj,
-                        LV_FLEX_ALIGN_START,   // main axis (left→right)
-                        LV_FLEX_ALIGN_CENTER,  // cross axis (top↕bottom)
-                        LV_FLEX_ALIGN_START    // track alignment for multi-line rows
-  );
-}
-
-void dd_set_simple_metric_column(lv_obj_t* col) {
-  lv_obj_set_size(col, LV_PCT(49), LV_SIZE_CONTENT);
-  dd_set_flex_column(col);
-  lv_obj_set_style_pad_row(col, 16, 0);
-  lv_obj_set_style_border_side(
-      col, (lv_border_side_t)(LV_BORDER_SIDE_BOTTOM | LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT), 0);
-  lv_obj_set_style_radius(col, 8, 0);
-  lv_obj_set_style_border_width(col, 4, 0);
-  lv_obj_set_style_border_color(col, SubaruReddishOrangeThing, 0);
-  lv_obj_set_style_pad_left(col, 16, 0);
-  lv_obj_set_style_pad_right(col, 16, 0);
-  lv_obj_set_style_pad_bottom(col, 20, 0);
 }
