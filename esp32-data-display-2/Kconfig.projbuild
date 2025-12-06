@@ -1,0 +1,15 @@
+menu "Custom DD Project Options"
+
+config DD_ENABLE_INTRO_SOUND
+    bool "Enable intro sound"
+    default y
+    help
+        Play the intro sound at startup when enabled.
+
+config DD_ENABLE_INTRO_SPLASH
+    bool "Enable intro splash"
+    default y
+    help
+        Show the intro splash animation at startup when enabled.
+
+endmenu

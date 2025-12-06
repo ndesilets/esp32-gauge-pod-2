@@ -41,7 +41,31 @@ simple_metric_t eth_conc;
 simple_metric_t inj_duty;
 simple_metric_t dam;
 simple_metric_t iat;
-static esp_codec_dev_handle_t codec_dev = NULL;
+
+typedef enum { STATUS_NOT_READY, STATUS_OK, STATUS_WARN, STATUS_CRITICAL } monitor_status;
+
+typedef struct {
+  float current_value;
+  float min_value;
+  float max_value;
+  monitor_status status;
+} numeric_monitor_t;
+
+typedef struct {
+  numeric_monitor_t water_temp;
+  numeric_monitor_t oil_temp;
+  numeric_monitor_t oil_pressure;
+
+  numeric_monitor_t dam;
+  numeric_monitor_t af_learned;
+  numeric_monitor_t af_ratio;
+  numeric_monitor_t int_temp;
+
+  numeric_monitor_t fb_knock;
+  numeric_monitor_t af_correct;
+  numeric_monitor_t inj_duty;
+  numeric_monitor_t eth_conc;
+} monitored_state_t;
 
 // ====== util functions =======
 
@@ -71,12 +95,11 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
 void extremely_awesome_splash_screen() {
   // best splash animation you could possibly have
 
-  // playback audio
-
+  // #if DD_ENABLE_INTRO_SOUND
   ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  // #endif
 
-  // playback video
-
+  // #if DD_ENABLE_INTRO_SPLASH
   size_t MAX_JPEG_SIZE = 70 * 1024;  // ~70kB
   if (!hw_jpeg_init(MAX_JPEG_SIZE, 720, 720)) {
     printf("HW JPEG init failed\n");
@@ -98,10 +121,28 @@ void extremely_awesome_splash_screen() {
   }
 
   // let last frame persist for a bit
-  vTaskDelay(pdMS_TO_TICKS(1500));
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   hw_jpeg_deinit();
   lv_obj_del(splash_image);
+  // #endif
+}
+
+// ====== ui callback stuff =======
+
+static void on_reset_button_clicked(lv_event_t* e) {
+  ESP_LOGI(TAG, "Reset button clicked");
+  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+}
+
+static void on_options_button_clicked(lv_event_t* e) {
+  ESP_LOGI(TAG, "Options button clicked");
+  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+}
+
+static void on_record_button_clicked(lv_event_t* e) {
+  ESP_LOGI(TAG, "Record button clicked");
+  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
 }
 
 // ====== sys level stuff =======
@@ -129,13 +170,13 @@ static void telemetry_task(void* arg) {
       framed_panel_update(&oil_temp_panel, wrap_range(i, -10, 250));
       framed_panel_update(&oil_psi_panel, wrap_range(i, 0, 100));
 
-      simple_metric_update(&afr, map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0));
+      simple_metric_update(&dam, map_sine_to_range(sinf(i / 50.0f), 0, 1));
       simple_metric_update(&af_learned, map_sine_to_range(sinf(i / 50.0f), -10, 10));
+      simple_metric_update(&afr, map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0));
       simple_metric_update(&fb_knock, map_sine_to_range(sinf(i / 50.0f), -4.2, 0));
 
       simple_metric_update(&eth_conc, map_sine_to_range(sinf(i / 50.0f), 10, 85));
       simple_metric_update(&inj_duty, map_sine_to_range(sinf(i / 50.0f), 0, 100));
-      simple_metric_update(&dam, map_sine_to_range(sinf(i / 50.0f), 0, 1));
 
       bsp_display_unlock();
     }
@@ -195,9 +236,6 @@ void app_main(void) {
   lv_obj_set_style_text_color(lv_screen_active(), lv_color_white(), 0);
   dd_init_styles();
 
-  lv_display_t* disp = lv_display_get_default();
-  lv_display_set_offset(disp, 0, 0);
-
   extremely_awesome_splash_screen();
 
   // set parent level container
@@ -253,9 +291,15 @@ void app_main(void) {
 
   lv_obj_t* reset_button = lv_btn_create(third_row);
   dd_set_action_button(reset_button, "RESET");
+  lv_obj_add_event_cb(reset_button, on_reset_button_clicked, LV_EVENT_CLICKED, NULL);
+
+  lv_obj_t* options_button = lv_btn_create(third_row);
+  dd_set_action_button(options_button, "OPTIONS");
+  lv_obj_add_event_cb(options_button, on_options_button_clicked, LV_EVENT_CLICKED, NULL);
 
   lv_obj_t* record_button = lv_btn_create(third_row);
   dd_set_action_button(record_button, "RECORD");
+  lv_obj_add_event_cb(record_button, on_record_button_clicked, LV_EVENT_CLICKED, NULL);
 
   // --- everything else
 

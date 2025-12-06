@@ -29,6 +29,8 @@ void dd_set_screen(lv_obj_t* obj);
 void dd_set_flex_row(lv_obj_t* obj);
 void dd_set_flex_column(lv_obj_t* obj);
 
+// --- screens
+
 // --- ui components
 void dd_set_simple_metric_column(lv_obj_t* col);
 void dd_set_framed_controls_row(lv_obj_t* obj);
