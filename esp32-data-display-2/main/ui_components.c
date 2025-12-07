@@ -307,13 +307,31 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_
   return out;
 }
 
-void framed_panel_update(framed_panel_t* panel, int gauge_value) {
+void framed_panel_update(framed_panel_t* panel, int gauge_value, monitor_status status) {
   panel->min_value = MIN(panel->min_value, gauge_value);
   panel->max_value = MAX(panel->max_value, gauge_value);
 
   lv_label_set_text_fmt(panel->main_value, "%d", gauge_value);
   lv_label_set_text_fmt(panel->minmax_value, "%d / %d", panel->min_value, panel->max_value);
   lv_bar_set_value(panel->bar, gauge_value, LV_ANIM_OFF);
+
+  int bg_opa;
+  lv_color_t bg_color;
+  switch (status) {
+    case STATUS_WARN:
+      bg_opa = LV_OPA_50;
+      bg_color = lv_palette_main(LV_PALETTE_YELLOW);
+      break;
+    case STATUS_CRITICAL:
+      bg_opa = LV_OPA_50;
+      bg_color = lv_palette_main(LV_PALETTE_RED);
+      break;
+    default:
+      bg_opa = LV_OPA_TRANSP;
+      bg_color = lv_color_black();
+  }
+  lv_obj_set_style_bg_opa(panel->container, bg_opa, 0);
+  lv_obj_set_style_bg_color(panel->container, bg_color, 0);
 }
 
 /*
@@ -375,10 +393,28 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title, float 
   return out;
 }
 
-void simple_metric_update(simple_metric_t* metric, float gauge_value) {
+void simple_metric_update(simple_metric_t* metric, float gauge_value, monitor_status status) {
   metric->min_value = MIN(metric->min_value, gauge_value);
   metric->max_value = MAX(metric->max_value, gauge_value);
   lv_label_set_text_fmt(metric->min_val, "%.1f", metric->min_value);
   lv_label_set_text_fmt(metric->cur_val, "%.1f", gauge_value);
   lv_label_set_text_fmt(metric->max_val, "%.1f", metric->max_value);
+
+  int bg_opa;
+  lv_color_t bg_color;
+  switch (status) {
+    case STATUS_WARN:
+      bg_opa = LV_OPA_50;
+      bg_color = lv_palette_main(LV_PALETTE_YELLOW);
+      break;
+    case STATUS_CRITICAL:
+      bg_opa = LV_OPA_50;
+      bg_color = lv_palette_main(LV_PALETTE_RED);
+      break;
+    default:
+      bg_opa = LV_OPA_TRANSP;
+      bg_color = lv_color_black();
+  }
+  lv_obj_set_style_bg_opa(metric->container, bg_opa, 0);
+  lv_obj_set_style_bg_color(metric->container, bg_color, 0);
 }

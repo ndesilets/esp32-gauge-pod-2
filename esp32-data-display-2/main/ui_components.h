@@ -1,4 +1,5 @@
 #include "lvgl.h"
+#include "monitors.h"
 
 typedef struct {
   lv_obj_t* container;
@@ -39,7 +40,7 @@ void dd_set_action_button(lv_obj_t* btn, const char* label);
 // --- gauge components
 framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_val, int min_bar_value,
                                    int max_bar_value);
-void framed_panel_update(framed_panel_t* panel, int cur_val);
+void framed_panel_update(framed_panel_t* panel, int cur_val, monitor_status status);
 
 simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title, float cur_val);
-void simple_metric_update(simple_metric_t* metric, float cur_val);
+void simple_metric_update(simple_metric_t* metric, float cur_val, monitor_status status);

@@ -42,8 +42,6 @@ simple_metric_t inj_duty;
 simple_metric_t dam;
 simple_metric_t iat;
 
-typedef enum { STATUS_NOT_READY, STATUS_OK, STATUS_WARN, STATUS_CRITICAL } monitor_status;
-
 typedef struct {
   float current_value;
   float min_value;
@@ -96,7 +94,7 @@ void extremely_awesome_splash_screen() {
   // best splash animation you could possibly have
 
   // #if DD_ENABLE_INTRO_SOUND
-  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
   // #endif
 
   // #if DD_ENABLE_INTRO_SPLASH
@@ -132,17 +130,17 @@ void extremely_awesome_splash_screen() {
 
 static void on_reset_button_clicked(lv_event_t* e) {
   ESP_LOGI(TAG, "Reset button clicked");
-  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
 }
 
 static void on_options_button_clicked(lv_event_t* e) {
   ESP_LOGI(TAG, "Options button clicked");
-  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
 }
 
 static void on_record_button_clicked(lv_event_t* e) {
   ESP_LOGI(TAG, "Record button clicked");
-  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
 }
 
 // ====== sys level stuff =======
@@ -162,24 +160,120 @@ static void init_littlefs(void) {
   }
 }
 
+monitored_state_t m_state = {
+    .water_temp = {.status = STATUS_OK},
+    .oil_temp = {.status = STATUS_OK},
+    .oil_pressure = {.status = STATUS_OK},
+    .dam = {.status = STATUS_OK},
+    .af_learned = {.status = STATUS_OK},
+    .af_ratio = {.status = STATUS_OK},
+    .int_temp = {.status = STATUS_OK},
+    .fb_knock = {.status = STATUS_OK},
+    .af_correct = {.status = STATUS_OK},
+    .inj_duty = {.status = STATUS_OK},
+    .eth_conc = {.status = STATUS_OK},
+};
+
 static void telemetry_task(void* arg) {
   int i = 0;
   for (;;) {
+    // --- get the data
+
+    unsigned int engine_rpm = wrap_range(i, 700, 7000);
+    m_state.water_temp.current_value = wrap_range(i, -10, 240);
+    m_state.oil_temp.current_value = wrap_range(i, -10, 300);
+    m_state.oil_pressure.current_value = wrap_range(i, 0, 100);
+
+    m_state.dam.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 1.049);
+    m_state.af_learned.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
+    m_state.af_ratio.current_value = map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0);
+    m_state.int_temp.current_value = map_sine_to_range(sinf(i / 50.0f), 30, 120);
+
+    m_state.fb_knock.current_value = map_sine_to_range(sinf(i / 50.0f), -6, 0.49);
+    m_state.af_correct.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
+    m_state.inj_duty.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 105);
+    m_state.eth_conc.current_value = map_sine_to_range(sinf(i / 50.0f), 10, 85);
+
+    // --- do monitoring logic
+
+    if (m_state.water_temp.current_value < 160) {
+      m_state.water_temp.status = STATUS_NOT_READY;
+    } else if (m_state.water_temp.current_value < 215) {
+      m_state.water_temp.status = STATUS_OK;
+    } else if (m_state.water_temp.current_value < 220) {
+      m_state.water_temp.status = STATUS_WARN;
+    } else {
+      m_state.water_temp.status = STATUS_CRITICAL;
+    }
+
+    if (m_state.oil_temp.current_value < 180) {
+      m_state.oil_temp.status = STATUS_NOT_READY;
+    } else if (m_state.oil_temp.current_value < 240) {
+      m_state.oil_temp.status = STATUS_OK;
+    } else if (m_state.oil_temp.current_value < 250) {
+      m_state.oil_temp.status = STATUS_WARN;
+    } else {
+      m_state.oil_temp.status = STATUS_CRITICAL;
+    }
+
+    // TODO: oil pressure alarm
+    // needs to be correlated with engine RPM within +- some range
+
+    if (m_state.dam.current_value < 1.0) {
+      m_state.dam.status = STATUS_CRITICAL;
+    } else {
+      m_state.dam.status = STATUS_OK;
+    }
+
+    if (fabsf(m_state.af_learned.current_value) >= 11) {
+      m_state.af_learned.status = STATUS_WARN;
+    } else {
+      m_state.af_learned.status = STATUS_OK;
+    }
+
+    // TODO: monitor AFR with secondary wideband
+
+    if (engine_rpm >= 2000) {  // anything below is likely noise
+      if (m_state.fb_knock.current_value < 2.81) {
+        m_state.fb_knock.status = STATUS_CRITICAL;
+      } else if (m_state.fb_knock.current_value < 0) {
+        m_state.fb_knock.status = STATUS_WARN;
+      } else {
+        m_state.fb_knock.status = STATUS_OK;
+      }
+    }
+
+    if (m_state.inj_duty.current_value > 90) {
+      m_state.inj_duty.status = STATUS_WARN;
+    } else if (m_state.inj_duty.current_value >= 100) {
+      m_state.inj_duty.status = STATUS_CRITICAL;
+    } else {
+      m_state.inj_duty.status = STATUS_OK;
+    }
+
+    uint64_t now_ms = esp_timer_get_time() / 1000;
+
+    // --- update display
+
     if (bsp_display_lock(pdMS_TO_TICKS(100))) {
-      framed_panel_update(&water_temp_panel, wrap_range(i, -10, 220));
-      framed_panel_update(&oil_temp_panel, wrap_range(i, -10, 250));
-      framed_panel_update(&oil_psi_panel, wrap_range(i, 0, 100));
+      framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.status);
+      framed_panel_update(&oil_temp_panel, m_state.oil_temp.current_value, m_state.oil_temp.status);
+      framed_panel_update(&oil_psi_panel, m_state.oil_pressure.current_value, m_state.oil_pressure.status);
 
-      simple_metric_update(&dam, map_sine_to_range(sinf(i / 50.0f), 0, 1));
-      simple_metric_update(&af_learned, map_sine_to_range(sinf(i / 50.0f), -10, 10));
-      simple_metric_update(&afr, map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0));
-      simple_metric_update(&fb_knock, map_sine_to_range(sinf(i / 50.0f), -4.2, 0));
+      simple_metric_update(&dam, m_state.dam.current_value, m_state.dam.status);
+      simple_metric_update(&af_learned, m_state.af_learned.current_value, m_state.af_learned.status);
+      simple_metric_update(&afr, m_state.af_ratio.current_value, m_state.af_ratio.status);
+      simple_metric_update(&fb_knock, m_state.fb_knock.current_value, m_state.fb_knock.status);
 
-      simple_metric_update(&eth_conc, map_sine_to_range(sinf(i / 50.0f), 10, 85));
-      simple_metric_update(&inj_duty, map_sine_to_range(sinf(i / 50.0f), 0, 100));
+      simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.status);
+      simple_metric_update(&inj_duty, m_state.inj_duty.current_value, m_state.inj_duty.status);
 
       bsp_display_unlock();
     }
+
+    int64_t elapsed_ms = (esp_timer_get_time() / 1000) - now_ms;
+    ESP_LOGI(TAG, "UI updating took %lld ms", elapsed_ms);
+
     i++;
     vTaskDelay(pdMS_TO_TICKS(33));
   }
@@ -193,13 +287,16 @@ void app_main(void) {
 
   // --- init display
 
+  // anything that involves changing background etc seems to benefit from full size buffer + spiram
+  // otherwise don't use spiram and smaller buffer is good
   bsp_display_cfg_t cfg = {.lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-                           .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
-                           //  .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
-                           .double_buffer = true,
+                           //  .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
+                           .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
+                           .double_buffer = false,
                            .flags = {
                                .buff_dma = true,
-                               .buff_spiram = false,
+                               //  .buff_spiram = false,
+                               .buff_spiram = true,
                                .sw_rotate = false,
                            }};
   bsp_display_start_with_config(&cfg);
