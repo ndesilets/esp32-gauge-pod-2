@@ -1,0 +1,26 @@
+#pragma once
+#include <stdint.h>
+
+typedef struct {
+  // metadata
+  uint32_t sequence;
+  uint32_t timestamp_ms;
+
+  // primary
+  float water_temp;
+  float oil_temp;
+  float oil_pressure;
+
+  float dam;
+  float af_learned;
+  float af_ratio;
+  float int_temp;
+
+  float fb_knock;
+  float af_correct;
+  float inj_duty;
+  float eth_conc;
+
+  // supplemental
+  float engine_rpm;
+} telemetry_packet_t;

@@ -1,0 +1,4 @@
+# Start with a predefined base style (e.g., LLVM, Google, Chromium, Microsoft, Mozilla)
+BasedOnStyle: Google
+
+ColumnLimit: 120
