@@ -4,7 +4,7 @@ file(GLOB_RECURSE MAIN_SRCS *.c *.cpp)
 
 idf_component_register(
     SRCS ${MAIN_SRCS} ${LV_DEMOS_SOURCES}
-    INCLUDE_DIRS . ${LV_DEMO_DIR} fonts)
+    INCLUDE_DIRS . ${LV_DEMO_DIR} fonts "../../esp32-shared/include")
 
 idf_component_get_property(LVGL_LIB lvgl__lvgl COMPONENT_LIB)
 target_compile_options(

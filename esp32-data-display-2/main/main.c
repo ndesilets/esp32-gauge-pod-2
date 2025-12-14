@@ -6,6 +6,7 @@
 #include "bsp/display.h"
 #include "bsp/esp-bsp.h"
 #include "bsp_board_extra.h"
+#include "car_data.h"
 #include "driver/i2s_std.h"
 #include "esp_check.h"
 #include "esp_codec_dev.h"
@@ -18,9 +19,11 @@
 #include "freertos/task.h"
 #include "lv_demos.h"
 #include "lvgl.h"
+#include "math.h"
 #include "monitoring.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "telemetry_types.h"
 #include "ui_components.h"
 
 static const char* TAG = "app";
@@ -45,29 +48,6 @@ monitored_state_t m_state = {
     .eth_conc = {.current_value = 67.0, .status = STATUS_OK},
 };
 
-// ====== util functions =======
-
-int wrap_range(int counter, int lo, int hi) {
-  if (hi <= lo) {
-    return lo;  // or handle as error
-  }
-  int span = hi - lo + 1;
-  int offset = counter % span;
-  if (offset < 0) {
-    offset += span;  // guard against negative counters
-  }
-  return lo + offset;
-}
-
-float map_sine_to_range(float sine_val, float lo, float hi) {
-  if (hi <= lo) {
-    return lo;  // or handle as error
-  }
-  // sine_val expected in [-1, 1]
-  float normalized = (sine_val + 1.0f) * 0.5f;  // now 0..1
-  return lo + normalized * (hi - lo);
-}
-
 // ====== ui callback stuff =======
 
 static void on_reset_button_clicked(lv_event_t* e) {
@@ -91,32 +71,30 @@ static void telemetry_task(void* arg) {
   static monitored_state_t prev_state = {0};
   static bool prev_state_valid = false;
 
-  int i = 0;
   for (;;) {
     uint64_t now_ms = esp_timer_get_time() / 1000;
 
     // --- get the data
 
-    // unsigned int engine_rpm = wrap_range(i, 700, 7000);
-    unsigned int engine_rpm = 2500;
+    telemetry_packet_t packet = get_data();
 
-    update_numeric_monitor(&m_state.water_temp, wrap_range(i / 4, 190, 240));
-    update_numeric_monitor(&m_state.oil_temp, wrap_range(i / 4, 200, 300));
-    update_numeric_monitor(&m_state.oil_pressure, wrap_range(i / 4, 0, 100));
+    update_numeric_monitor(&m_state.water_temp, packet.water_temp);
+    update_numeric_monitor(&m_state.oil_temp, packet.oil_temp);
+    update_numeric_monitor(&m_state.oil_pressure, packet.oil_pressure);
 
-    update_numeric_monitor(&m_state.dam, map_sine_to_range(sinf(i / 50.0f), 0, 1.049));
-    update_numeric_monitor(&m_state.af_learned, map_sine_to_range(sinf(i / 50.0f), -10, 10));
-    update_numeric_monitor(&m_state.af_ratio, map_sine_to_range(sinf(i / 50.0f), 10.0, 20.0));
-    update_numeric_monitor(&m_state.int_temp, map_sine_to_range(sinf(i / 50.0f), 0, 120));
+    update_numeric_monitor(&m_state.dam, packet.dam);
+    update_numeric_monitor(&m_state.af_learned, packet.af_learned);
+    update_numeric_monitor(&m_state.af_ratio, packet.af_ratio);
+    update_numeric_monitor(&m_state.int_temp, packet.int_temp);
 
-    update_numeric_monitor(&m_state.fb_knock, map_sine_to_range(sinf(i / 50.0f), -6, 0.49));
-    update_numeric_monitor(&m_state.af_correct, map_sine_to_range(sinf(i / 50.0f), -10, 10));
-    update_numeric_monitor(&m_state.inj_duty, map_sine_to_range(sinf(i / 50.0f), 0, 105));
-    update_numeric_monitor(&m_state.eth_conc, map_sine_to_range(sinf(i / 50.0f), 10, 85));
+    update_numeric_monitor(&m_state.fb_knock, packet.fb_knock);
+    update_numeric_monitor(&m_state.af_correct, packet.af_correct);
+    update_numeric_monitor(&m_state.inj_duty, packet.inj_duty);
+    update_numeric_monitor(&m_state.eth_conc, packet.eth_conc);
 
     // --- do monitoring
 
-    evaluate_statuses(&m_state, engine_rpm);
+    evaluate_statuses(&m_state, packet.engine_rpm);
 
     bool alert_transition = false;
     if (prev_state_valid) {
@@ -126,7 +104,7 @@ static void telemetry_task(void* arg) {
     prev_state_valid = true;
 
     if (alert_transition) {
-      ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/ahh2.wav"));
+      // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/ahh2.wav"));
       ESP_LOGW(TAG, "oh FUCK");
     }
 
@@ -154,7 +132,6 @@ static void telemetry_task(void* arg) {
     int64_t elapsed_ms = (esp_timer_get_time() / 1000) - now_ms;
     // ESP_LOGI(TAG, "UI updating took %lld ms", elapsed_ms);
 
-    i++;
     vTaskDelay(pdMS_TO_TICKS(33));
   }
 }
