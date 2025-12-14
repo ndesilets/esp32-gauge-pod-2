@@ -1,6 +1,10 @@
 #include "ui_components.h"
 
+#include "driver/jpeg_decode.h"
 #include "fonts.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "hw_jpeg.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -159,7 +163,7 @@ void dd_set_action_button(lv_obj_t* btn, const char* label) {
 }
 
 // ====================================================================================================================
-// gauge components
+// overview screen components
 // ====================================================================================================================
 
 /*
@@ -418,3 +422,148 @@ void simple_metric_update(simple_metric_t* metric, float gauge_value, monitor_st
   lv_obj_set_style_bg_opa(metric->container, bg_opa, 0);
   lv_obj_set_style_bg_color(metric->container, bg_color, 0);
 }
+
+// ====================================================================================================================
+// screens components
+// ====================================================================================================================
+
+void _set_base_screen_stuff(lv_obj_t* screen) {
+  lv_obj_set_style_pad_all(screen, 0, 0);
+  lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+  lv_obj_set_style_text_color(screen, lv_color_white(), 0);
+
+  lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+  lv_obj_set_style_text_color(screen, lv_color_white(), 0);
+}
+
+void set_extremely_awesome_splash_screen(lv_obj_t* screen) {
+  _set_base_screen_stuff(screen);
+
+  // best splash animation you could possibly have
+
+  // #if DD_ENABLE_INTRO_SOUND
+  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  // #endif
+
+  // #if DD_ENABLE_INTRO_SPLASH
+  size_t MAX_JPEG_SIZE = 70 * 1024;  // ~70kB
+  if (!hw_jpeg_init(MAX_JPEG_SIZE, 720, 720)) {
+    printf("HW JPEG init failed\n");
+    return;
+  }
+
+  lv_obj_t* splash_image = lv_image_create(screen);
+  lv_obj_set_size(splash_image, lv_pct(100), lv_pct(100));
+  lv_image_set_scale(splash_image, LV_SCALE_NONE);  // no scaling distortion
+  static lv_image_dsc_t splash_frame_dsc;
+
+  for (int i = 0; i < 73; i++) {
+    char filename[40];
+    snprintf(filename, sizeof(filename), "/storage/jpegs/bklogo00108%03d.jpg", i);
+
+    hw_jpeg_decode_file_to_lvimg(filename, &splash_frame_dsc);
+    lv_image_set_src(splash_image, &splash_frame_dsc);
+    lv_timer_handler();
+  }
+
+  // let last frame persist for a bit
+  vTaskDelay(pdMS_TO_TICKS(1000));
+
+  hw_jpeg_deinit();
+  lv_obj_del(splash_image);
+  // #endif
+}
+
+framed_panel_t water_temp_panel;
+framed_panel_t oil_temp_panel;
+framed_panel_t oil_psi_panel;
+
+simple_metric_t afr;
+simple_metric_t af_correct;
+simple_metric_t af_learned;
+simple_metric_t fb_knock;
+simple_metric_t eth_conc;
+simple_metric_t inj_duty;
+simple_metric_t dam;
+simple_metric_t iat;
+
+void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clicked,
+                            lv_event_cb_t on_options_button_clicked, lv_event_cb_t on_record_button_clicked) {
+  lv_obj_set_size(screen, LV_PCT(100), LV_PCT(100));
+  dd_set_screen(screen);
+
+  // --- top row
+
+  lv_obj_t* first_row = lv_obj_create(screen);
+  lv_obj_set_size(first_row, LV_PCT(100), 240);
+  dd_set_flex_row(first_row);
+  lv_obj_set_style_pad_column(first_row, 16, 0);
+  lv_obj_set_style_pad_all(first_row, 0, 0);
+
+  water_temp_panel = framed_panel_create(first_row, "W.TEMP", 87, 160, 220);
+  oil_temp_panel = framed_panel_create(first_row, "O.TEMP", 74, 160, 250);
+  oil_psi_panel = framed_panel_create(first_row, "O.PSI", 21, 0, 100);
+
+  // --- second row
+
+  lv_obj_t* second_row = lv_obj_create(screen);
+  lv_obj_set_size(second_row, LV_PCT(100), LV_SIZE_CONTENT);
+  dd_set_flex_row(second_row);
+  lv_obj_set_flex_align(second_row,
+                        // LV_FLEX_ALIGN_SPACE_AROUND,  // main axis (left→right)
+                        LV_FLEX_ALIGN_SPACE_BETWEEN,  // main axis (left→right)
+                        LV_FLEX_ALIGN_CENTER,         // cross axis (top↕bottom)
+                        LV_FLEX_ALIGN_START           // track alignment for multi-line rows
+  );
+  lv_obj_set_style_pad_all(second_row, 0, 0);
+  lv_obj_set_style_pad_top(second_row, 4, 0);
+
+  lv_obj_t* left_col = lv_obj_create(second_row);
+  dd_set_simple_metric_column(left_col);
+  dam = simple_metric_create(left_col, "DAM", 1.0);
+  af_learned = simple_metric_create(left_col, "AF.LEARNED", -7.5);
+  afr = simple_metric_create(left_col, "AF.RATIO", 11.1);
+  iat = simple_metric_create(left_col, "INT.TEMP", 67.9);
+
+  lv_obj_t* right_col = lv_obj_create(second_row);
+  dd_set_simple_metric_column(right_col);
+  fb_knock = simple_metric_create(right_col, "FB.KNOCK", -1.4);
+  af_correct = simple_metric_create(right_col, "AF.CORRECT", -7.5);
+  inj_duty = simple_metric_create(right_col, "INJ.DUTY", 1.11);
+  eth_conc = simple_metric_create(right_col, "ETH.CONC", 61.0);
+
+  // --- third row
+
+  lv_obj_t* third_row = lv_obj_create(screen);
+  dd_set_framed_controls_row(third_row);
+
+  lv_obj_t* reset_button = lv_btn_create(third_row);
+  dd_set_action_button(reset_button, "RESET");
+  lv_obj_add_event_cb(reset_button, on_reset_button_clicked, LV_EVENT_CLICKED, NULL);
+
+  lv_obj_t* options_button = lv_btn_create(third_row);
+  dd_set_action_button(options_button, "OPTIONS");
+  lv_obj_add_event_cb(options_button, on_options_button_clicked, LV_EVENT_CLICKED, NULL);
+
+  lv_obj_t* record_button = lv_btn_create(third_row);
+  dd_set_action_button(record_button, "RECORD");
+  lv_obj_add_event_cb(record_button, on_record_button_clicked, LV_EVENT_CLICKED, NULL);
+}
+
+void dd_update_overview_screen(monitored_state_t m_state) {
+  framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.status);
+  framed_panel_update(&oil_temp_panel, m_state.oil_temp.current_value, m_state.oil_temp.status);
+  framed_panel_update(&oil_psi_panel, m_state.oil_pressure.current_value, m_state.oil_pressure.status);
+
+  simple_metric_update(&dam, m_state.dam.current_value, m_state.dam.status);
+  simple_metric_update(&af_learned, m_state.af_learned.current_value, m_state.af_learned.status);
+  simple_metric_update(&afr, m_state.af_ratio.current_value, m_state.af_ratio.status);
+  simple_metric_update(&fb_knock, m_state.fb_knock.current_value, m_state.fb_knock.status);
+
+  simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.status);
+  simple_metric_update(&inj_duty, m_state.inj_duty.current_value, m_state.inj_duty.status);
+}
+
+void dd_set_metric_detail_screen(lv_obj_t* screen) {}
+void dd_update_metric_detail_screen(monitored_state_t m_state) {}
