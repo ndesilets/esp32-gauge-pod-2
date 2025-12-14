@@ -755,6 +755,14 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# DD Project Options
+#
+CONFIG_DD_ENABLE_INTRO_SOUND=y
+CONFIG_DD_ENABLE_INTRO_SPLASH=y
+CONFIG_DD_ENABLE_FAKE_DATA=y
+# end of DD Project Options
+
+#
 # Compiler options
 #
 # CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set

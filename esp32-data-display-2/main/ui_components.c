@@ -432,9 +432,9 @@ void set_extremely_awesome_splash_screen(lv_obj_t* screen) {
 
   // best splash animation you could possibly have
 
-  // #if DD_ENABLE_INTRO_SOUND
-  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
-  // #endif
+#if CONFIG_DD_ENABLE_INTRO_SOUND
+  ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+#endif
 
   // #if DD_ENABLE_INTRO_SPLASH
   size_t MAX_JPEG_SIZE = 70 * 1024;  // ~70kB

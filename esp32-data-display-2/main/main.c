@@ -208,9 +208,10 @@ void app_main(void) {
   dd_init_styles();
 
   lv_obj_t* splash_screen = lv_obj_create(NULL);
+#if CONFIG_DD_ENABLE_INTRO_SPLASH
   lv_screen_load(splash_screen);
   set_extremely_awesome_splash_screen(splash_screen);
-
+#endif
   // setup screens
 
   overview_screen = lv_obj_create(NULL);

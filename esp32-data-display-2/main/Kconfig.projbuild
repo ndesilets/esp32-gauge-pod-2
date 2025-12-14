@@ -1,4 +1,4 @@
-menu "Custom DD Project Options"
+menu "DD Project Options"
 
 config DD_ENABLE_INTRO_SOUND
     bool "Enable intro sound"
@@ -11,5 +11,11 @@ config DD_ENABLE_INTRO_SPLASH
     default y
     help
         Show the intro splash animation at startup when enabled.
+
+config DD_ENABLE_FAKE_DATA
+    bool "Enable fake data generation"
+    default y
+    help
+        Generate fake telemetry data for testing purposes when enabled.
 
 endmenu
