@@ -65,6 +65,33 @@ typedef struct {
   numeric_monitor_t eth_conc;
 } monitored_state_t;
 
+static inline bool is_alert_status(monitor_status status) { return status == STATUS_WARN || status == STATUS_CRITICAL; }
+
+static inline bool is_new_alert(monitor_status previous, monitor_status current) {
+  if (!is_alert_status(current)) {
+    return false;
+  }
+  // New alert if we were not alerting before, or if severity increased (WARN -> CRITICAL).
+  if (!is_alert_status(previous)) {
+    return true;
+  }
+  return previous == STATUS_WARN && current == STATUS_CRITICAL;
+}
+
+static bool has_alert_transition(const monitored_state_t* prev, const monitored_state_t* curr) {
+  return is_new_alert(prev->water_temp.status, curr->water_temp.status) ||
+         is_new_alert(prev->oil_temp.status, curr->oil_temp.status) ||
+         is_new_alert(prev->oil_pressure.status, curr->oil_pressure.status) ||
+         is_new_alert(prev->dam.status, curr->dam.status) ||
+         is_new_alert(prev->af_learned.status, curr->af_learned.status) ||
+         is_new_alert(prev->af_ratio.status, curr->af_ratio.status) ||
+         is_new_alert(prev->int_temp.status, curr->int_temp.status) ||
+         is_new_alert(prev->fb_knock.status, curr->fb_knock.status) ||
+         is_new_alert(prev->af_correct.status, curr->af_correct.status) ||
+         is_new_alert(prev->inj_duty.status, curr->inj_duty.status) ||
+         is_new_alert(prev->eth_conc.status, curr->eth_conc.status);
+}
+
 // ====== util functions =======
 
 int wrap_range(int counter, int lo, int hi) {
@@ -164,36 +191,43 @@ monitored_state_t m_state = {
     .water_temp = {.status = STATUS_OK},
     .oil_temp = {.status = STATUS_OK},
     .oil_pressure = {.status = STATUS_OK},
-    .dam = {.status = STATUS_OK},
-    .af_learned = {.status = STATUS_OK},
-    .af_ratio = {.status = STATUS_OK},
-    .int_temp = {.status = STATUS_OK},
-    .fb_knock = {.status = STATUS_OK},
-    .af_correct = {.status = STATUS_OK},
-    .inj_duty = {.status = STATUS_OK},
-    .eth_conc = {.status = STATUS_OK},
+    .dam = {.current_value = 1.0, .status = STATUS_OK},
+    .af_learned = {.current_value = 0.0, .status = STATUS_OK},
+    .af_ratio = {.current_value = 14.7, .status = STATUS_OK},
+    .int_temp = {.current_value = 67.0, .status = STATUS_OK},
+    .fb_knock = {.current_value = 0.0, .status = STATUS_OK},
+    .af_correct = {.current_value = 0.0, .status = STATUS_OK},
+    .inj_duty = {.current_value = 0.0, .status = STATUS_OK},
+    .eth_conc = {.current_value = 67.0, .status = STATUS_OK},
 };
 
+void do_monitoring() {}
+
 static void telemetry_task(void* arg) {
+  static monitored_state_t prev_state = {0};
+  static bool prev_state_valid = false;
+
   int i = 0;
   for (;;) {
+    uint64_t now_ms = esp_timer_get_time() / 1000;
+
     // --- get the data
 
     // unsigned int engine_rpm = wrap_range(i, 700, 7000);
     unsigned int engine_rpm = 2500;
-    m_state.water_temp.current_value = wrap_range(i, -10, 240);
-    m_state.oil_temp.current_value = wrap_range(i, -10, 300);
-    m_state.oil_pressure.current_value = wrap_range(i, 0, 100);
+    m_state.water_temp.current_value = wrap_range(i / 3, -10, 240);
+    m_state.oil_temp.current_value = wrap_range(i / 3, -10, 300);
+    m_state.oil_pressure.current_value = wrap_range(i / 3, 0, 100);
 
-    m_state.dam.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 1.049);
-    m_state.af_learned.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
-    m_state.af_ratio.current_value = map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0);
-    m_state.int_temp.current_value = map_sine_to_range(sinf(i / 50.0f), 30, 120);
+    // m_state.dam.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 1.049);
+    // m_state.af_learned.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
+    // m_state.af_ratio.current_value = map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0);
+    // m_state.int_temp.current_value = map_sine_to_range(sinf(i / 50.0f), 30, 120);
 
-    m_state.fb_knock.current_value = map_sine_to_range(sinf(i / 50.0f), -6, 0.49);
-    m_state.af_correct.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
-    m_state.inj_duty.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 105);
-    m_state.eth_conc.current_value = map_sine_to_range(sinf(i / 50.0f), 10, 85);
+    // m_state.fb_knock.current_value = map_sine_to_range(sinf(i / 50.0f), -6, 0.49);
+    // m_state.af_correct.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
+    // m_state.inj_duty.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 105);
+    // m_state.eth_conc.current_value = map_sine_to_range(sinf(i / 50.0f), 10, 85);
 
     // --- do monitoring logic
 
@@ -252,7 +286,22 @@ static void telemetry_task(void* arg) {
       m_state.inj_duty.status = STATUS_OK;
     }
 
-    uint64_t now_ms = esp_timer_get_time() / 1000;
+    // --- play audio alerts
+
+    bool alert_transition = false;
+    if (prev_state_valid) {
+      alert_transition = has_alert_transition(&prev_state, &m_state);
+    }
+    prev_state = m_state;
+    prev_state_valid = true;
+
+    if (alert_transition && audio_player_get_state() != AUDIO_PLAYER_STATE_PLAYING) {
+      ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/ahh2.wav"));
+    }
+
+    // --- update rpm counter
+
+    // TODO
 
     // --- update display
 
@@ -283,6 +332,8 @@ static void telemetry_task(void* arg) {
 // ====== main =======
 
 void app_main(void) {
+  // --- init audio
+
   ESP_ERROR_CHECK(bsp_extra_codec_init());
   ESP_ERROR_CHECK(bsp_extra_player_init());
 
@@ -293,7 +344,7 @@ void app_main(void) {
   bsp_display_cfg_t cfg = {.lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
                            //  .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
                            .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
-                           .double_buffer = false,
+                           .double_buffer = true,
                            .flags = {
                                .buff_dma = true,
                                //  .buff_spiram = false,
