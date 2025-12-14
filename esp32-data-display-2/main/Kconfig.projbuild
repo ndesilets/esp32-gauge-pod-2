@@ -18,4 +18,10 @@ config DD_ENABLE_FAKE_DATA
     help
         Generate fake telemetry data for testing purposes when enabled.
 
+config DD_ENABLE_ALERT_AUDIO
+    bool "Enable alert audio"
+    default y
+    help
+        Yell when alerts trigger when enabled.
+
 endmenu

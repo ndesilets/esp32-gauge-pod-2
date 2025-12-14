@@ -1,5 +1,6 @@
 #include "ui_components.h"
 
+#include "bsp_board_extra.h"
 #include "driver/jpeg_decode.h"
 #include "fonts.h"
 #include "freertos/FreeRTOS.h"
@@ -8,7 +9,7 @@
 
 // Shared accent color derived from Subaru interior lighting
 static lv_color_t SubaruReddishOrangeThing = {.blue = 6, .green = 1, .red = 254};
-static lv_color_t SubaruYellowGaugeThing = {.blue = 83, .green = 246, .red = 248};
+// static lv_color_t SubaruYellowGaugeThing = {.blue = 83, .green = 246, .red = 248};
 
 // ====================================================================================================================
 // general purpose stuff

@@ -27,7 +27,6 @@
 #include "ui_components.h"
 
 static const char* TAG = "app";
-static lv_color_t SubaruReddishOrangeThing = {.blue = 6, .green = 1, .red = 254};
 
 typedef enum { OVERVIEW, METRIC_DETAIL } ui_state_t;
 ui_state_t ui_state = OVERVIEW;
@@ -78,6 +77,8 @@ static void telemetry_task(void* arg) {
 
     telemetry_packet_t packet = get_data();
 
+    // --- do monitoring
+
     update_numeric_monitor(&m_state.water_temp, packet.water_temp);
     update_numeric_monitor(&m_state.oil_temp, packet.oil_temp);
     update_numeric_monitor(&m_state.oil_pressure, packet.oil_pressure);
@@ -92,8 +93,6 @@ static void telemetry_task(void* arg) {
     update_numeric_monitor(&m_state.inj_duty, packet.inj_duty);
     update_numeric_monitor(&m_state.eth_conc, packet.eth_conc);
 
-    // --- do monitoring
-
     evaluate_statuses(&m_state, packet.engine_rpm);
 
     bool alert_transition = false;
@@ -104,7 +103,9 @@ static void telemetry_task(void* arg) {
     prev_state_valid = true;
 
     if (alert_transition) {
-      // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/ahh2.wav"));
+#ifdef CONFIG_DD_ENABLE_ALERT_AUDIO
+      ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/tacobell.wav"));
+#endif
       ESP_LOGW(TAG, "oh FUCK");
     }
 
@@ -149,13 +150,13 @@ void app_main(void) {
   // anything that involves changing background opacity seems to benefit from full size buffer + spiram
   // otherwise not using spiram and smaller buffer is good
   bsp_display_cfg_t cfg = {.lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-                           .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
-                           //  .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
-                           .double_buffer = true,
+                           //  .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
+                           .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
+                           //  .double_buffer = true,
                            .flags = {
                                .buff_dma = true,
-                               .buff_spiram = false,
-                               //  .buff_spiram = true,
+                               //  .buff_spiram = false,
+                               .buff_spiram = true,
                                .sw_rotate = false,
                            }};
   bsp_display_start_with_config(&cfg);

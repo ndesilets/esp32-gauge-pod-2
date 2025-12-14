@@ -1,5 +1,7 @@
 #include "car_data.h"
 
+#include "esp_timer.h"
+#include "math.h"
 #include "sdkconfig.h"
 
 #ifdef CONFIG_DD_ENABLE_FAKE_DATA
@@ -33,19 +35,19 @@ telemetry_packet_t get_data() {
       .timestamp_ms = esp_timer_get_time() / 1000,
 
       // primary
-      .water_temp = wrap_range(i / 4, 190, 240),
+      // .water_temp = wrap_range(i / 4, 190, 240),
       .oil_temp = wrap_range(i / 4, 200, 300),
-      .oil_pressure = wrap_range(i / 4, 0, 100),
+      // .oil_pressure = wrap_range(i / 4, 0, 100),
 
-      .dam = map_sine_to_range(sinf(i / 50.0f), 0, 1.049),
-      .af_learned = map_sine_to_range(sinf(i / 50.0f), -10, 10),
-      .af_ratio = map_sine_to_range(sinf(i / 50.0f), 10.0, 20.0),
-      .int_temp = map_sine_to_range(sinf(i / 50.0f), 0, 120),
+      // .dam = map_sine_to_range(sinf(i / 50.0f), 0, 1.049),
+      // .af_learned = map_sine_to_range(sinf(i / 50.0f), -10, 10),
+      // .af_ratio = map_sine_to_range(sinf(i / 50.0f), 10.0, 20.0),
+      // .int_temp = map_sine_to_range(sinf(i / 50.0f), 0, 120),
 
-      .fb_knock = map_sine_to_range(sinf(i / 50.0f), -6, 0.49),
-      .af_correct = map_sine_to_range(sinf(i / 50.0f), -10, 10),
-      .inj_duty = map_sine_to_range(sinf(i / 50.0f), 0, 105),
-      .eth_conc = map_sine_to_range(sinf(i / 50.0f), 10, 85),
+      // .fb_knock = map_sine_to_range(sinf(i / 50.0f), -6, 0.49),
+      // .af_correct = map_sine_to_range(sinf(i / 50.0f), -10, 10),
+      // .inj_duty = map_sine_to_range(sinf(i / 50.0f), 0, 105),
+      // .eth_conc = map_sine_to_range(sinf(i / 50.0f), 10, 85),
 
       // supplemental
       .engine_rpm = 2500.0f,
