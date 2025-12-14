@@ -99,19 +99,20 @@ static void telemetry_task(void* arg) {
 
     // unsigned int engine_rpm = wrap_range(i, 700, 7000);
     unsigned int engine_rpm = 2500;
-    m_state.water_temp.current_value = wrap_range(i / 4, 190, 240);
-    m_state.oil_temp.current_value = wrap_range(i / 4, 200, 300);
-    m_state.oil_pressure.current_value = wrap_range(i / 4, 0, 100);
 
-    // m_state.dam.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 1.049);
-    // m_state.af_learned.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
-    // m_state.af_ratio.current_value = map_sine_to_range(sinf(i / 50.0f), 11.1, 20.0);
-    // m_state.int_temp.current_value = map_sine_to_range(sinf(i / 50.0f), 30, 120);
+    update_numeric_monitor(&m_state.water_temp, wrap_range(i / 4, 190, 240));
+    update_numeric_monitor(&m_state.oil_temp, wrap_range(i / 4, 200, 300));
+    update_numeric_monitor(&m_state.oil_pressure, wrap_range(i / 4, 0, 100));
 
-    // m_state.fb_knock.current_value = map_sine_to_range(sinf(i / 50.0f), -6, 0.49);
-    // m_state.af_correct.current_value = map_sine_to_range(sinf(i / 50.0f), -10, 10);
-    // m_state.inj_duty.current_value = map_sine_to_range(sinf(i / 50.0f), 0, 105);
-    // m_state.eth_conc.current_value = map_sine_to_range(sinf(i / 50.0f), 10, 85);
+    update_numeric_monitor(&m_state.dam, map_sine_to_range(sinf(i / 50.0f), 0, 1.049));
+    update_numeric_monitor(&m_state.af_learned, map_sine_to_range(sinf(i / 50.0f), -10, 10));
+    update_numeric_monitor(&m_state.af_ratio, map_sine_to_range(sinf(i / 50.0f), 10.0, 20.0));
+    update_numeric_monitor(&m_state.int_temp, map_sine_to_range(sinf(i / 50.0f), 0, 120));
+
+    update_numeric_monitor(&m_state.fb_knock, map_sine_to_range(sinf(i / 50.0f), -6, 0.49));
+    update_numeric_monitor(&m_state.af_correct, map_sine_to_range(sinf(i / 50.0f), -10, 10));
+    update_numeric_monitor(&m_state.inj_duty, map_sine_to_range(sinf(i / 50.0f), 0, 105));
+    update_numeric_monitor(&m_state.eth_conc, map_sine_to_range(sinf(i / 50.0f), 10, 85));
 
     // --- do monitoring
 
@@ -126,6 +127,7 @@ static void telemetry_task(void* arg) {
 
     if (alert_transition) {
       ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/ahh2.wav"));
+      ESP_LOGW(TAG, "oh FUCK");
     }
 
     // --- update rpm counter
@@ -150,7 +152,7 @@ static void telemetry_task(void* arg) {
     }
 
     int64_t elapsed_ms = (esp_timer_get_time() / 1000) - now_ms;
-    ESP_LOGI(TAG, "UI updating took %lld ms", elapsed_ms);
+    // ESP_LOGI(TAG, "UI updating took %lld ms", elapsed_ms);
 
     i++;
     vTaskDelay(pdMS_TO_TICKS(33));
@@ -170,13 +172,13 @@ void app_main(void) {
   // anything that involves changing background opacity seems to benefit from full size buffer + spiram
   // otherwise not using spiram and smaller buffer is good
   bsp_display_cfg_t cfg = {.lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-                           //  .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
-                           .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
+                           .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
+                           //  .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
                            .double_buffer = true,
                            .flags = {
                                .buff_dma = true,
-                               //  .buff_spiram = false,
-                               .buff_spiram = true,
+                               .buff_spiram = false,
+                               //  .buff_spiram = true,
                                .sw_rotate = false,
                            }};
   bsp_display_start_with_config(&cfg);

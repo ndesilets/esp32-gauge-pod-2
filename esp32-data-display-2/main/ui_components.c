@@ -6,9 +6,6 @@
 #include "freertos/task.h"
 #include "hw_jpeg.h"
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 // Shared accent color derived from Subaru interior lighting
 static lv_color_t SubaruReddishOrangeThing = {.blue = 6, .green = 1, .red = 254};
 static lv_color_t SubaruYellowGaugeThing = {.blue = 83, .green = 246, .red = 248};
@@ -173,8 +170,6 @@ void dd_set_action_button(lv_obj_t* btn, const char* label) {
 framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_val, int min_bar_value,
                                    int max_bar_value) {
   framed_panel_t out = {0};
-  out.min_value = cur_val;
-  out.max_value = cur_val;
 
   out.container = lv_obj_create(parent);
   lv_obj_set_size(out.container, 222, 236);
@@ -256,7 +251,7 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_
   lv_obj_set_style_text_color(out.minmax_value, lv_color_white(), 0);
   lv_obj_set_style_text_font(out.minmax_value, &lv_font_montserrat_22, 0);
   lv_obj_set_style_pad_all(out.minmax_value, 0, 0);
-  lv_label_set_text_fmt(out.minmax_value, "%d / %d", out.min_value, out.max_value);
+  lv_label_set_text_fmt(out.minmax_value, "%d / %d", cur_val, cur_val);
 
   // bar / scale
 
@@ -311,13 +306,10 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_
   return out;
 }
 
-void framed_panel_update(framed_panel_t* panel, int gauge_value, monitor_status status) {
-  panel->min_value = MIN(panel->min_value, gauge_value);
-  panel->max_value = MAX(panel->max_value, gauge_value);
-
-  lv_label_set_text_fmt(panel->main_value, "%d", gauge_value);
-  lv_label_set_text_fmt(panel->minmax_value, "%d / %d", panel->min_value, panel->max_value);
-  lv_bar_set_value(panel->bar, gauge_value, LV_ANIM_OFF);
+void framed_panel_update(framed_panel_t* panel, int cur_val, int min_val, int max_val, monitor_status status) {
+  lv_label_set_text_fmt(panel->main_value, "%d", cur_val);
+  lv_label_set_text_fmt(panel->minmax_value, "%d / %d", min_val, max_val);
+  lv_bar_set_value(panel->bar, cur_val, LV_ANIM_OFF);
 
   int bg_opa;
   lv_color_t bg_color;
@@ -397,12 +389,10 @@ simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title, float 
   return out;
 }
 
-void simple_metric_update(simple_metric_t* metric, float gauge_value, monitor_status status) {
-  metric->min_value = MIN(metric->min_value, gauge_value);
-  metric->max_value = MAX(metric->max_value, gauge_value);
-  lv_label_set_text_fmt(metric->min_val, "%.1f", metric->min_value);
-  lv_label_set_text_fmt(metric->cur_val, "%.1f", gauge_value);
-  lv_label_set_text_fmt(metric->max_val, "%.1f", metric->max_value);
+void simple_metric_update(simple_metric_t* metric, float cur_val, float min_val, float max_val, monitor_status status) {
+  lv_label_set_text_fmt(metric->min_val, "%.1f", min_val);
+  lv_label_set_text_fmt(metric->cur_val, "%.1f", cur_val);
+  lv_label_set_text_fmt(metric->max_val, "%.1f", max_val);
 
   int bg_opa;
   lv_color_t bg_color;
@@ -501,9 +491,9 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clic
   lv_obj_set_style_pad_column(first_row, 16, 0);
   lv_obj_set_style_pad_all(first_row, 0, 0);
 
-  water_temp_panel = framed_panel_create(first_row, "W.TEMP", 87, 160, 220);
-  oil_temp_panel = framed_panel_create(first_row, "O.TEMP", 74, 160, 250);
-  oil_psi_panel = framed_panel_create(first_row, "O.PSI", 21, 0, 100);
+  water_temp_panel = framed_panel_create(first_row, "W.TEMP", 0, 160, 220);
+  oil_temp_panel = framed_panel_create(first_row, "O.TEMP", 0, 160, 250);
+  oil_psi_panel = framed_panel_create(first_row, "O.PSI", 0, 0, 100);
 
   // --- second row
 
@@ -521,17 +511,17 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clic
 
   lv_obj_t* left_col = lv_obj_create(second_row);
   dd_set_simple_metric_column(left_col);
-  dam = simple_metric_create(left_col, "DAM", 1.0);
-  af_learned = simple_metric_create(left_col, "AF.LEARNED", -7.5);
-  afr = simple_metric_create(left_col, "AF.RATIO", 11.1);
-  iat = simple_metric_create(left_col, "INT.TEMP", 67.9);
+  dam = simple_metric_create(left_col, "DAM", 0);
+  af_learned = simple_metric_create(left_col, "AF.LEARNED", 0);
+  afr = simple_metric_create(left_col, "AF.RATIO", 0);
+  iat = simple_metric_create(left_col, "INT.TEMP", 0);
 
   lv_obj_t* right_col = lv_obj_create(second_row);
   dd_set_simple_metric_column(right_col);
-  fb_knock = simple_metric_create(right_col, "FB.KNOCK", -1.4);
-  af_correct = simple_metric_create(right_col, "AF.CORRECT", -7.5);
-  inj_duty = simple_metric_create(right_col, "INJ.DUTY", 1.11);
-  eth_conc = simple_metric_create(right_col, "ETH.CONC", 61.0);
+  fb_knock = simple_metric_create(right_col, "FB.KNOCK", 0);
+  af_correct = simple_metric_create(right_col, "AF.CORRECT", 0);
+  inj_duty = simple_metric_create(right_col, "INJ.DUTY", 0);
+  eth_conc = simple_metric_create(right_col, "ETH.CONC", 0);
 
   // --- third row
 
@@ -552,17 +542,26 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clic
 }
 
 void dd_update_overview_screen(monitored_state_t m_state) {
-  framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.status);
-  framed_panel_update(&oil_temp_panel, m_state.oil_temp.current_value, m_state.oil_temp.status);
-  framed_panel_update(&oil_psi_panel, m_state.oil_pressure.current_value, m_state.oil_pressure.status);
+  framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.min_value,
+                      m_state.water_temp.max_value, m_state.water_temp.status);
+  framed_panel_update(&oil_temp_panel, m_state.oil_temp.current_value, m_state.oil_temp.min_value,
+                      m_state.oil_temp.max_value, m_state.oil_temp.status);
+  framed_panel_update(&oil_psi_panel, m_state.oil_pressure.current_value, m_state.oil_pressure.min_value,
+                      m_state.oil_pressure.max_value, m_state.oil_pressure.status);
 
-  simple_metric_update(&dam, m_state.dam.current_value, m_state.dam.status);
-  simple_metric_update(&af_learned, m_state.af_learned.current_value, m_state.af_learned.status);
-  simple_metric_update(&afr, m_state.af_ratio.current_value, m_state.af_ratio.status);
-  simple_metric_update(&fb_knock, m_state.fb_knock.current_value, m_state.fb_knock.status);
+  simple_metric_update(&dam, m_state.dam.current_value, m_state.dam.min_value, m_state.dam.max_value,
+                       m_state.dam.status);
+  simple_metric_update(&af_learned, m_state.af_learned.current_value, m_state.af_learned.min_value,
+                       m_state.af_learned.max_value, m_state.af_learned.status);
+  simple_metric_update(&afr, m_state.af_ratio.current_value, m_state.af_ratio.min_value, m_state.af_ratio.max_value,
+                       m_state.af_ratio.status);
+  simple_metric_update(&fb_knock, m_state.fb_knock.current_value, m_state.fb_knock.min_value,
+                       m_state.fb_knock.max_value, m_state.fb_knock.status);
 
-  simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.status);
-  simple_metric_update(&inj_duty, m_state.inj_duty.current_value, m_state.inj_duty.status);
+  simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.min_value,
+                       m_state.eth_conc.max_value, m_state.eth_conc.status);
+  simple_metric_update(&inj_duty, m_state.inj_duty.current_value, m_state.inj_duty.min_value,
+                       m_state.inj_duty.max_value, m_state.inj_duty.status);
 }
 
 void dd_set_metric_detail_screen(lv_obj_t* screen) {}

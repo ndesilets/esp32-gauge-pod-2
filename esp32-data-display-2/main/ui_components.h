@@ -9,8 +9,6 @@ typedef struct {
   lv_obj_t* main_value;
   lv_obj_t* minmax_value;
   lv_obj_t* bar;
-  int min_value;
-  int max_value;
 } framed_panel_t;
 
 typedef struct {
@@ -20,8 +18,6 @@ typedef struct {
   lv_obj_t* min_val;
   lv_obj_t* cur_val;
   lv_obj_t* max_val;
-  float min_value;
-  float max_value;
 } simple_metric_t;
 
 // --- general purpose stuff
@@ -41,10 +37,10 @@ void dd_set_action_button(lv_obj_t* btn, const char* label);
 
 framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_val, int min_bar_value,
                                    int max_bar_value);
-void framed_panel_update(framed_panel_t* panel, int cur_val, monitor_status status);
+void framed_panel_update(framed_panel_t* panel, int cur_val, int min_val, int max_val, monitor_status status);
 
 simple_metric_t simple_metric_create(lv_obj_t* parent, const char* title, float cur_val);
-void simple_metric_update(simple_metric_t* metric, float cur_val, monitor_status status);
+void simple_metric_update(simple_metric_t* metric, float cur_val, float min_val, float max_val, monitor_status status);
 
 // --- screens
 

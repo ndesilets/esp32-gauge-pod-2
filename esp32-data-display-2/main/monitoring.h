@@ -30,6 +30,8 @@ typedef struct {
   numeric_monitor_t eth_conc;
 } monitored_state_t;
 
+void update_numeric_monitor(numeric_monitor_t* monitor, float new_value);
+
 // compares states to check for any newly set warn/critical status transitions
 bool has_alert_transition(const monitored_state_t* prev, const monitored_state_t* curr);
 

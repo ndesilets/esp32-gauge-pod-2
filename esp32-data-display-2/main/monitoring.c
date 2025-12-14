@@ -2,6 +2,15 @@
 
 #include "math.h"
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+void update_numeric_monitor(numeric_monitor_t* monitor, float new_value) {
+  monitor->current_value = new_value;
+  monitor->min_value = MIN(monitor->min_value, new_value);
+  monitor->max_value = MAX(monitor->max_value, new_value);
+}
+
 bool is_alert_status(monitor_status status) { return status == STATUS_WARN || status == STATUS_CRITICAL; }
 
 bool is_new_alert(monitor_status previous, monitor_status current) {
