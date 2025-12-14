@@ -1,1 +1,0 @@
-typedef enum { STATUS_NOT_READY, STATUS_OK, STATUS_WARN, STATUS_CRITICAL } monitor_status;
