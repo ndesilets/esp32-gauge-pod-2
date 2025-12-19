@@ -46,7 +46,7 @@ void simple_metric_update(simple_metric_t* metric, float cur_val, float min_val,
 
 // splash
 
-void set_extremely_awesome_splash_screen(lv_obj_t* screen);
+void dd_set_extremely_awesome_splash_screen(lv_obj_t* screen);
 
 // overview
 

@@ -64,9 +64,9 @@ static void on_record_button_clicked(lv_event_t* e) {
   // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
 }
 
-// ====== sys level stuff =======
+// ====== tasks =======
 
-static void telemetry_task(void* arg) {
+static void main_loop_task(void* arg) {
   static monitored_state_t prev_state = {0};
   static bool prev_state_valid = false;
 
@@ -103,10 +103,11 @@ static void telemetry_task(void* arg) {
     prev_state_valid = true;
 
     if (alert_transition) {
+      // TODO different sounds for different alerts?
 #ifdef CONFIG_DD_ENABLE_ALERT_AUDIO
       ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/tacobell.wav"));
 #endif
-      ESP_LOGW(TAG, "oh FUCK");
+      ESP_LOGW(TAG, "uh oh stinky");
     }
 
     // --- update rpm counter
@@ -169,27 +170,22 @@ void app_main(void) {
       .base_path = "/storage", .partition_label = NULL, .format_if_mount_failed = true};
   esp_err_t ret = esp_vfs_littlefs_register(&littlefs_conf);
   if (ret != ESP_OK) {
-    if (ret == ESP_FAIL) {
-      ESP_LOGE(TAG, "Failed to mount or format filesystem");
-    } else if (ret == ESP_ERR_NOT_FOUND) {
-      ESP_LOGE(TAG, "Failed to find LittleFS partition");
-    } else {
-      ESP_LOGE(TAG, "Failed to initialize LittleFS (%s)", esp_err_to_name(ret));
-    }
+    ESP_LOGE(TAG, "Failed to initialize LittleFS (%s)", esp_err_to_name(ret));
     return;
   }
 
   // --- init UI
 
-  bsp_display_lock(0);  // need to lock to build UI in thread safe manner
+  bsp_display_lock(0);
 
   dd_init_styles();
 
   lv_obj_t* splash_screen = lv_obj_create(NULL);
 #if CONFIG_DD_ENABLE_INTRO_SPLASH
   lv_screen_load(splash_screen);
-  set_extremely_awesome_splash_screen(splash_screen);
+  dd_set_extremely_awesome_splash_screen(splash_screen);
 #endif
+
   // setup screens
 
   overview_screen = lv_obj_create(NULL);
@@ -197,8 +193,6 @@ void app_main(void) {
 
   metric_detail_screen = lv_obj_create(NULL);
   dd_set_metric_detail_screen(metric_detail_screen);
-
-  ESP_LOGI(TAG, "Screen setup complete");
 
   switch (ui_state) {
     case OVERVIEW:
@@ -211,12 +205,10 @@ void app_main(void) {
       break;
   }
 
-  ESP_LOGI(TAG, "Default screen set");
-
   lv_obj_del(splash_screen);
   bsp_display_unlock();
 
   // --- everything else
 
-  xTaskCreate(telemetry_task, "telemetry", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(main_loop_task, "main_loop", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
 }

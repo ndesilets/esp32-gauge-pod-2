@@ -428,7 +428,7 @@ void _set_base_screen_stuff(lv_obj_t* screen) {
   lv_obj_set_style_text_color(screen, lv_color_white(), 0);
 }
 
-void set_extremely_awesome_splash_screen(lv_obj_t* screen) {
+void dd_set_extremely_awesome_splash_screen(lv_obj_t* screen) {
   _set_base_screen_stuff(screen);
 
   // best splash animation you could possibly have

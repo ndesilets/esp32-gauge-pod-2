@@ -25,6 +25,7 @@ bool is_new_alert(monitor_status previous, monitor_status current) {
 }
 
 bool has_alert_transition(const monitored_state_t* prev, const monitored_state_t* curr) {
+  // TODO i hate this
   return is_new_alert(prev->water_temp.status, curr->water_temp.status) ||
          is_new_alert(prev->oil_temp.status, curr->oil_temp.status) ||
          is_new_alert(prev->oil_pressure.status, curr->oil_pressure.status) ||
