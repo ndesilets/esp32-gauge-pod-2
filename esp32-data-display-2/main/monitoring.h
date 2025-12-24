@@ -37,3 +37,5 @@ bool has_alert_transition(const monitored_state_t* prev, const monitored_state_t
 
 // check m_state and set status fields appropriately
 void evaluate_statuses(monitored_state_t* m_state, unsigned int engine_rpm);
+
+void reset_monitored_state(monitored_state_t* m_state);

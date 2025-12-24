@@ -46,12 +46,15 @@ monitored_state_t m_state = {
     .inj_duty = {.current_value = 0.0, .status = STATUS_OK},
     .eth_conc = {.current_value = 67.0, .status = STATUS_OK},
 };
+SemaphoreHandle_t m_state_mutex;
 
 // ====== ui callback stuff =======
 
 static void on_reset_button_clicked(lv_event_t* e) {
-  ESP_LOGI(TAG, "Reset button clicked");
-  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  if (xSemaphoreTake(m_state_mutex, pdMS_TO_TICKS(100))) {
+    reset_monitored_state(&m_state);
+    xSemaphoreGive(m_state_mutex);
+  }
 }
 
 static void on_options_button_clicked(lv_event_t* e) {
@@ -79,31 +82,38 @@ static void main_loop_task(void* arg) {
 
     // --- do monitoring
 
-    update_numeric_monitor(&m_state.water_temp, packet.water_temp);
-    update_numeric_monitor(&m_state.oil_temp, packet.oil_temp);
-    update_numeric_monitor(&m_state.oil_pressure, packet.oil_pressure);
-
-    update_numeric_monitor(&m_state.dam, packet.dam);
-    update_numeric_monitor(&m_state.af_learned, packet.af_learned);
-    update_numeric_monitor(&m_state.af_ratio, packet.af_ratio);
-    update_numeric_monitor(&m_state.int_temp, packet.int_temp);
-
-    update_numeric_monitor(&m_state.fb_knock, packet.fb_knock);
-    update_numeric_monitor(&m_state.af_correct, packet.af_correct);
-    update_numeric_monitor(&m_state.inj_duty, packet.inj_duty);
-    update_numeric_monitor(&m_state.eth_conc, packet.eth_conc);
-
-    evaluate_statuses(&m_state, packet.engine_rpm);
-
     bool alert_transition = false;
-    if (prev_state_valid) {
-      alert_transition = has_alert_transition(&prev_state, &m_state);
+
+    if (xSemaphoreTake(m_state_mutex, pdMS_TO_TICKS(100))) {
+      update_numeric_monitor(&m_state.water_temp, packet.water_temp);
+      update_numeric_monitor(&m_state.oil_temp, packet.oil_temp);
+      update_numeric_monitor(&m_state.oil_pressure, packet.oil_pressure);
+
+      update_numeric_monitor(&m_state.dam, packet.dam);
+      update_numeric_monitor(&m_state.af_learned, packet.af_learned);
+      update_numeric_monitor(&m_state.af_ratio, packet.af_ratio);
+      update_numeric_monitor(&m_state.int_temp, packet.int_temp);
+
+      update_numeric_monitor(&m_state.fb_knock, packet.fb_knock);
+      update_numeric_monitor(&m_state.af_correct, packet.af_correct);
+      update_numeric_monitor(&m_state.inj_duty, packet.inj_duty);
+      update_numeric_monitor(&m_state.eth_conc, packet.eth_conc);
+
+      evaluate_statuses(&m_state, packet.engine_rpm);
+
+      if (prev_state_valid) {
+        alert_transition = has_alert_transition(&prev_state, &m_state);
+      }
+
+      xSemaphoreGive(m_state_mutex);
+    } else {
+      ESP_LOGW(TAG, "Could not take m_state mutex in main loop (missed packet)");
     }
+
     prev_state = m_state;
     prev_state_valid = true;
 
     if (alert_transition) {
-      // TODO different sounds for different alerts?
 #ifdef CONFIG_DD_ENABLE_ALERT_AUDIO
       ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/tacobell.wav"));
 #endif
@@ -141,6 +151,10 @@ static void main_loop_task(void* arg) {
 // ====== main =======
 
 void app_main(void) {
+  // --- init vars
+
+  m_state_mutex = xSemaphoreCreateMutex();
+
   // --- init audio
 
   ESP_ERROR_CHECK(bsp_extra_codec_init());
