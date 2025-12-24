@@ -58,3 +58,7 @@ void dd_update_overview_screen(monitored_state_t m_state);
 
 void dd_set_metric_detail_screen(lv_obj_t* screen);
 void dd_update_metric_detail_screen(monitored_state_t m_state);
+
+// options
+
+void dd_set_options_screen(lv_obj_t* screen);

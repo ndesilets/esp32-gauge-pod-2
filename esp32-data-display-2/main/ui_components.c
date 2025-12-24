@@ -567,3 +567,44 @@ void dd_update_overview_screen(monitored_state_t m_state) {
 
 void dd_set_metric_detail_screen(lv_obj_t* screen) {}
 void dd_update_metric_detail_screen(monitored_state_t m_state) {}
+
+// options
+
+void dd_set_options_screen(lv_obj_t* screen) {
+  dd_set_screen(screen);
+  lv_obj_set_size(screen, LV_PCT(100), LV_PCT(100));  // TODO: should all screens just be 100%
+
+  // brightness
+
+  lv_obj_t* first_row = lv_obj_create(screen);
+  lv_obj_set_size(first_row, LV_PCT(100), 240);
+  dd_set_flex_row(first_row);
+  lv_obj_set_style_pad_column(first_row, 16, 0);
+  lv_obj_set_style_pad_all(first_row, 0, 0);
+
+  lv_obj_t* brightness_header = lv_label_create(first_row);
+  lv_label_set_text(brightness_header, "Brightness");
+
+  lv_obj_t* brightness_slider = lv_slider_create(first_row);
+  lv_obj_center(brightness_slider);
+
+  lv_obj_t* brightness_value = lv_label_create(first_row);
+  lv_label_set_text(brightness_value, "0%");
+
+  // volume
+
+  lv_obj_t* second_row = lv_obj_create(screen);
+  lv_obj_set_size(second_row, LV_PCT(100), 240);
+  dd_set_flex_row(second_row);
+  lv_obj_set_style_pad_column(second_row, 16, 0);
+  lv_obj_set_style_pad_all(second_row, 0, 0);
+
+  lv_obj_t* volume_header = lv_label_create(second_row);
+  lv_label_set_text(volume_header, "Volume");
+
+  lv_obj_t* volume_slider = lv_slider_create(second_row);
+  lv_obj_center(volume_slider);
+
+  lv_obj_t* volume_value = lv_label_create(second_row);
+  lv_label_set_text(volume_value, "0%");
+}

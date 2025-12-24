@@ -28,10 +28,11 @@
 
 static const char* TAG = "app";
 
-typedef enum { OVERVIEW, METRIC_DETAIL } ui_state_t;
+typedef enum { OVERVIEW, METRIC_DETAIL, OPTIONS } ui_state_t;
 ui_state_t ui_state = OVERVIEW;
 lv_obj_t* overview_screen;
 lv_obj_t* metric_detail_screen;
+lv_obj_t* options_screen;
 
 monitored_state_t m_state = {
     .water_temp = {.status = STATUS_OK},
@@ -59,7 +60,7 @@ static void on_reset_button_clicked(lv_event_t* e) {
 
 static void on_options_button_clicked(lv_event_t* e) {
   ESP_LOGI(TAG, "Options button clicked");
-  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  lv_screen_load(options_screen);
 }
 
 static void on_record_button_clicked(lv_event_t* e) {
@@ -133,6 +134,9 @@ static void main_loop_task(void* arg) {
           break;
         case METRIC_DETAIL:
           dd_update_metric_detail_screen(m_state);
+          break;
+        case OPTIONS:
+          // TODO
           break;
         default:
           break;
@@ -208,16 +212,10 @@ void app_main(void) {
   metric_detail_screen = lv_obj_create(NULL);
   dd_set_metric_detail_screen(metric_detail_screen);
 
-  switch (ui_state) {
-    case OVERVIEW:
-      lv_screen_load(overview_screen);
-      break;
-    case METRIC_DETAIL:
-      lv_screen_load(metric_detail_screen);
-      break;
-    default:
-      break;
-  }
+  options_screen = lv_obj_create(NULL);
+  dd_set_options_screen(options_screen);
+
+  lv_screen_load(options_screen);
 
   lv_obj_del(splash_screen);
   bsp_display_unlock();
