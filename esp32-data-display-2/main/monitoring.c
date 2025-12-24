@@ -97,3 +97,24 @@ void evaluate_statuses(monitored_state_t* m_state, unsigned int engine_rpm) {
     m_state->inj_duty.status = STATUS_OK;
   }
 }
+
+void reset_numeric_monitor(numeric_monitor_t* monitor) {
+  monitor->min_value = monitor->current_value;
+  monitor->max_value = monitor->current_value;
+}
+
+void reset_monitored_state(monitored_state_t* m_state) {
+  reset_numeric_monitor(&m_state->oil_temp);
+  reset_numeric_monitor(&m_state->water_temp);
+  reset_numeric_monitor(&m_state->oil_pressure);
+
+  reset_numeric_monitor(&m_state->dam);
+  reset_numeric_monitor(&m_state->af_learned);
+  reset_numeric_monitor(&m_state->af_ratio);
+  reset_numeric_monitor(&m_state->int_temp);
+
+  reset_numeric_monitor(&m_state->fb_knock);
+  reset_numeric_monitor(&m_state->af_correct);
+  reset_numeric_monitor(&m_state->inj_duty);
+  reset_numeric_monitor(&m_state->eth_conc);
+}
