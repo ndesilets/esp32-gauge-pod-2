@@ -596,6 +596,13 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# DH Project Options
+#
+# CONFIG_DH_ENABLE_FAKE_DATA is not set
+CONFIG_DH_UART_BUFFER_SIZE=512
+# end of DH Project Options
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
