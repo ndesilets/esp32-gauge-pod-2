@@ -5,6 +5,7 @@
  */
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "cbor.h"
@@ -22,6 +23,11 @@
 
 static const char* TAG = "data_hub";
 static SemaphoreHandle_t device_disconnected_sem;
+
+#define SLIP_END 0xC0
+#define SLIP_ESC 0xDB
+#define SLIP_ESC_END 0xDC
+#define SLIP_ESC_ESC 0xDD
 
 int wrap_range(int counter, int lo, int hi) {
   if (hi <= lo) {
@@ -77,6 +83,44 @@ void encode_telemetry_packet(const telemetry_packet_t* packet, uint8_t* buffer, 
   }
 }
 
+bool slip_encode(const uint8_t* input, size_t input_size, uint8_t* output, size_t output_size, size_t* encoded_size) {
+  size_t out_idx = 0;
+
+  if (out_idx >= output_size) {
+    return false;
+  }
+  output[out_idx++] = SLIP_END;
+
+  for (size_t i = 0; i < input_size; i++) {
+    uint8_t byte = input[i];
+    if (byte == SLIP_END) {
+      if (out_idx + 2 > output_size) {
+        return false;
+      }
+      output[out_idx++] = SLIP_ESC;
+      output[out_idx++] = SLIP_ESC_END;
+    } else if (byte == SLIP_ESC) {
+      if (out_idx + 2 > output_size) {
+        return false;
+      }
+      output[out_idx++] = SLIP_ESC;
+      output[out_idx++] = SLIP_ESC_ESC;
+    } else {
+      if (out_idx + 1 > output_size) {
+        return false;
+      }
+      output[out_idx++] = byte;
+    }
+  }
+
+  if (out_idx >= output_size) {
+    return false;
+  }
+  output[out_idx++] = SLIP_END;
+  *encoded_size = out_idx;
+  return true;
+}
+
 void do_things_task(void* arg) {
   const TickType_t period_ticks = pdMS_TO_TICKS(33);  // ~30hz
   TickType_t last_wake = xTaskGetTickCount();
@@ -94,9 +138,10 @@ void do_things_task(void* arg) {
   };
   int intr_alloc_flags = 0;
 
-  ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, intr_alloc_flags));
-  ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-  ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 43, 44, 15, 16));
+  ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
+  ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, 17, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+  QueueHandle_t uart_queue;
+  ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, 512, 512, 10, &uart_queue, intr_alloc_flags));
 
   for (;;) {
     telemetry_packet_t packet = {
@@ -127,8 +172,19 @@ void do_things_task(void* arg) {
     encode_telemetry_packet(&packet, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
     cbor_buffer[encoded_size] = '\0';
 
-    uart_write_bytes(UART_NUM_0, cbor_buffer, encoded_size);
-    ESP_LOGI(TAG, "sent %d bytes", encoded_size);
+    // uint8_t slip_buffer[260];
+    // size_t slip_size = 0;
+    // if (!slip_encode(cbor_buffer, encoded_size, slip_buffer, sizeof(slip_buffer), &slip_size)) {
+    //   ESP_LOGE(TAG, "SLIP encoding failed; dropping packet");
+    //   vTaskDelayUntil(&last_wake, period_ticks);
+    //   continue;
+    // }
+
+    uart_write_bytes(UART_NUM_1, cbor_buffer, encoded_size);
+    for (size_t i = 0; i < encoded_size; i++) {
+      printf("%02X ", cbor_buffer[i]);
+    }
+    printf("\n\n");
 
     sequence++;
     vTaskDelayUntil(&last_wake, period_ticks);
@@ -140,5 +196,5 @@ void app_main(void) {
 
   // everything else
 
-  xTaskCreate(do_things_task, "do_things", 2048, NULL, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(do_things_task, "do_things", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
 }

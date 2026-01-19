@@ -81,7 +81,8 @@ static void main_loop_task(void* arg) {
 
     // --- get the data
 
-    telemetry_packet_t packet = get_data();
+    telemetry_packet_t packet;
+    bool received = get_data(&packet);
 
     // --- do monitoring
 
@@ -157,6 +158,8 @@ static void main_loop_task(void* arg) {
 // ====== main =======
 
 void app_main(void) {
+  ESP_LOGI(TAG, "hello, world!");
+
   // --- init vars
 
   m_state_mutex = xSemaphoreCreateMutex();
@@ -175,13 +178,10 @@ void app_main(void) {
   int intr_alloc_flags = 0;
 
   ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
-  ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, 43, 44, 15, 16));
-
-  // Setup UART buffered IO with event queue
-  const int uart_buffer_size = (512 * 2);
+  ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, 21, 22, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
   QueueHandle_t uart_queue;
-  // Install UART driver using an event queue here
-  ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, uart_buffer_size, uart_buffer_size, 10, &uart_queue, 0));
+  ESP_ERROR_CHECK(
+      uart_driver_install(UART_NUM_1, CONFIG_DD_UART_BUFFER_SIZE, CONFIG_DD_UART_BUFFER_SIZE, 10, &uart_queue, 0));
 #endif
 
   // --- init audio
@@ -240,7 +240,8 @@ void app_main(void) {
   options_screen = lv_obj_create(NULL);
   dd_set_options_screen(options_screen);
 
-  lv_screen_load(options_screen);
+  // lv_screen_load(options_screen);
+  lv_screen_load(overview_screen);
 
   lv_obj_del(splash_screen);
   bsp_display_unlock();

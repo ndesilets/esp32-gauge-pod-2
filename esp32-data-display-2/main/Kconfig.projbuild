@@ -24,4 +24,11 @@ config DD_ENABLE_ALERT_AUDIO
     help
         Yell when alerts trigger when enabled.
 
+config DD_UART_BUFFER_SIZE
+    int "UART buffer size"
+    range 64 4096
+    default 512
+    help
+        Size in bytes for the UART RX/TX buffers used by the telemetry connection.
+
 endmenu
