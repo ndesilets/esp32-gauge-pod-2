@@ -20,7 +20,6 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lv_demos.h"
 #include "lvgl.h"
 #include "math.h"
 #include "monitoring.h"

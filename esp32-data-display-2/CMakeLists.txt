@@ -9,7 +9,7 @@ set(EXTRA_COMPONENT_DIRS
     )
 
 add_compile_options(-Wno-format)
-project(lvgl_demo_v9)
+project(data_display_2)
 
 # Build LittleFS image from assets and flash it with the project
 include(${CMAKE_CURRENT_LIST_DIR}/managed_components/joltwallet__littlefs/project_include.cmake)
