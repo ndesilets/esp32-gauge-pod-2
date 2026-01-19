@@ -104,7 +104,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.5.2
+    version: 5.5.1
   joltwallet/littlefs:
     component_hash: 1808d73e99168f6f3c26dd31799a248484762b3a320ec4962dec11a145f4277f
     dependencies:
@@ -178,6 +178,6 @@ direct_dependencies:
 - joltwallet/littlefs
 - lvgl/lvgl
 - waveshare/esp32_p4_wifi6_touch_lcd_4b
-manifest_hash: f611da6b3438dbdcd0f308547ed021b909efe36f179ede96fd4c6cd8d41ab147
+manifest_hash: 0441f77b2680db1eb5c0fa2c3f7f90992fa40ac9ca43b0f5add4f9d3a8bde56b
 target: esp32p4
 version: 2.0.0

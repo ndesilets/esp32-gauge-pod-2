@@ -163,7 +163,7 @@ void app_main(void) {
 
   // --- init UART
 
-#ifndef DD_ENABLE_FAKE_DATA
+#ifndef CONFIG_DD_ENABLE_FAKE_DATA
   uart_config_t uart_config = {
       .baud_rate = 115200,
       .data_bits = UART_DATA_8_BITS,
