@@ -1,6 +1,9 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  idf:
+    version: '>=5.5.2'
   lvgl/lvgl:
     version: ^9.4.0
     public: true
   joltwallet/littlefs: ==1.20.3
+  espressif/cbor: ^0.6.0~1

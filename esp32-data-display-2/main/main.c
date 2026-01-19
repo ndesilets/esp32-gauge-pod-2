@@ -7,7 +7,10 @@
 #include "bsp/esp-bsp.h"
 #include "bsp_board_extra.h"
 #include "car_data.h"
+#include "cbor.h"
+#include "driver/gpio.h"
 #include "driver/i2s_std.h"
+#include "driver/uart.h"
 #include "esp_check.h"
 #include "esp_codec_dev.h"
 #include "esp_err.h"
@@ -158,6 +161,29 @@ void app_main(void) {
   // --- init vars
 
   m_state_mutex = xSemaphoreCreateMutex();
+
+  // --- init UART
+
+#ifndef DD_ENABLE_FAKE_DATA
+  uart_config_t uart_config = {
+      .baud_rate = 115200,
+      .data_bits = UART_DATA_8_BITS,
+      .parity = UART_PARITY_DISABLE,
+      .stop_bits = UART_STOP_BITS_1,
+      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+      .source_clk = UART_SCLK_DEFAULT,
+  };
+  int intr_alloc_flags = 0;
+
+  ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
+  ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, 43, 44, 15, 16));
+
+  // Setup UART buffered IO with event queue
+  const int uart_buffer_size = (512 * 2);
+  QueueHandle_t uart_queue;
+  // Install UART driver using an event queue here
+  ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, uart_buffer_size, uart_buffer_size, 10, &uart_queue, 0));
+#endif
 
   // --- init audio
 
