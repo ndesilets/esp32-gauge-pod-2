@@ -38,12 +38,13 @@ typedef struct {
 } can_rx_frame_t;
 
 typedef struct {
+  uint32_t source_id;
   size_t len;
   uint8_t data[128];
-} ssm_message_t;
+} assembled_isotp_t;
 
 static QueueHandle_t can_rx_queue = NULL;
-static QueueHandle_t ssm_msg_queue = NULL;
+static QueueHandle_t assembled_isotp_queue = NULL;
 
 // --- cbor encoder
 
@@ -153,7 +154,10 @@ void send_mock_data(void* arg) {
 // --- analog sensor stuff
 
 void analog_data_task(void* arg) {
-  // poll analog sensors and update state
+  while (1) {
+    // TODO read analog sensors and update state
+    vTaskDelay(pdMS_TO_TICKS(20));  // ~50hz
+  }
 }
 
 // --- ssm/uds stuff
@@ -231,6 +235,7 @@ static void send_isotp_flow_control(twai_node_handle_t node_hdl) {
   ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &fc_msg, pdMS_TO_TICKS(100)));
 }
 
+// takes raw CAN frames and pushes them to a queue for further processing outside of an ISR
 static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_t* edata, void* user_ctx) {
   (void)edata;
   QueueHandle_t rx_queue = (QueueHandle_t)user_ctx;
@@ -323,6 +328,7 @@ void send_ecu_data_request(twai_node_handle_t node_hdl) {
   }
 }
 
+// assembles isotp message from responses for only one request.
 void isotp_assembler_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
 
@@ -347,7 +353,7 @@ void isotp_assembler_task(void* arg) {
       continue;
     }
 
-    if (frame.id != 0x7E8) {
+    if (frame.id != 0x7E8 && frame.id != 0x7B8) {
       continue;
     }
 
@@ -367,11 +373,12 @@ void isotp_assembler_task(void* arg) {
           break;
         }
         memcpy(buffer, &frame.data[1], payload_len);
-        ssm_message_t msg = {
+        assembled_isotp_t msg = {
+            .source_id = frame.id,
             .len = payload_len,
         };
         memcpy(msg.data, buffer, payload_len);
-        xQueueSend(ssm_msg_queue, &msg, pdMS_TO_TICKS(10));
+        xQueueSend(assembled_isotp_queue, &msg, pdMS_TO_TICKS(10));
         in_progress = false;
         buffer_len = 0;
         payload_length = 0;
@@ -417,11 +424,12 @@ void isotp_assembler_task(void* arg) {
         buffer_len += copy_len;
 
         if (buffer_len >= payload_length) {
-          ssm_message_t msg = {
+          assembled_isotp_t msg = {
+              .source_id = frame.id,
               .len = payload_length,
           };
           memcpy(msg.data, buffer, payload_length);
-          xQueueSend(ssm_msg_queue, &msg, pdMS_TO_TICKS(10));
+          xQueueSend(assembled_isotp_queue, &msg, pdMS_TO_TICKS(10));
           in_progress = false;
           buffer_len = 0;
           payload_length = 0;
@@ -439,87 +447,94 @@ void isotp_assembler_task(void* arg) {
   }
 }
 
-void send_abs_data_request() {}
+void send_abs_data_request(twai_node_handle_t node_hdl) {
+  // --- uds payload
 
-void handle_abs_data_response() {}
+  // uds payload with no iso-tp framing etc.
+  // clang-format off
+  uint8_t uds_req_payload[] = {
+      0x22,  // read memory by addr list
+      0x10, 0x10, // brake pressure
+      0x10, 0x29, // steering angle
+  };
+  // clang-format on
 
-void ssm_processing_task(void* arg) {
+  // --- assemble iso-tp frames
+
+  // assuming this is only ever going to send multi-frame ISO-TP messages
+
+  uint8_t can_frame[8] = {0};
+  can_frame[0] = 0x00 | (sizeof(uds_req_payload) & 0x0F);
+  memcpy(&can_frame[1], &uds_req_payload[0], sizeof(uds_req_payload));
+
+  // --- send frame over canbus
+
+  twai_frame_t msg = {
+      .header.id = 0x7B0,   // Message ID
+      .header.ide = false,  // Use 29-bit extended ID format
+      .buffer = can_frame,  // Pointer to data to transmit
+      .buffer_len = 8,      // Length of data to transmit
+  };
+  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
+}
+
+void assembled_isotp_processing_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
 
-  // fire first request
-  send_ecu_data_request(node_hdl);
-
   while (1) {
-    ssm_message_t msg;
-    if (xQueueReceive(ssm_msg_queue, &msg, portMAX_DELAY) != pdTRUE) {
+    send_ecu_data_request(node_hdl);
+    assembled_isotp_t msg;
+    if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
       continue;
     }
 
-    for (size_t i = 0; i < msg.len; i++) {
-      (void)msg.data[i];
-      // TODO parse/process SSM payload
+    // TODO parse msg.data
+    // TODO update state with ecu data
+
+    send_abs_data_request(node_hdl);
+    if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
+      continue;
     }
 
-    send_ecu_data_request(node_hdl);
+    // TODO parse msg.data
+    // TODO update state with abs data
+
+    vTaskDelay(pdMS_TO_TICKS(63));  // start with ~16hz, similar to accessport
   }
 }
 
 // --- uart stuff
 
 void uart_emitter_task(void* arg) {
-  // in the background, send whatever current state at a set interval (~30hz)
-
   const TickType_t period_ticks = pdMS_TO_TICKS(33);  // ~30hz
   TickType_t last_wake = xTaskGetTickCount();
-  uint32_t sequence = 0;
 
   // main loop
 
-  for (;;) {
-    telemetry_packet_t packet = {
-        .sequence = sequence,
-        .timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS,
+  while (1) {
+    vTaskDelayUntil(&last_wake, period_ticks);
 
-        // primary
-        .water_temp = wrap_range(sequence, -10, 240),
-        .oil_temp = wrap_range(sequence, -10, 300),
-        .oil_pressure = wrap_range(sequence, 0, 100),
-
-        .dam = map_sine_to_range(sinf(sequence / 50.0f), 0, 1.049),
-        .af_learned = map_sine_to_range(sinf(sequence / 50.0f), -10, 10),
-        .af_ratio = map_sine_to_range(sinf(sequence / 50.0f), 11.1, 20.0),
-        .int_temp = map_sine_to_range(sinf(sequence / 50.0f), 30, 120),
-
-        .fb_knock = map_sine_to_range(sinf(sequence / 50.0f), -6, 0.49),
-        .af_correct = map_sine_to_range(sinf(sequence / 50.0f), -10, 10),
-        .inj_duty = map_sine_to_range(sinf(sequence / 50.0f), 0, 105),
-        .eth_conc = map_sine_to_range(sinf(sequence / 50.0f), 10, 85),
-
-        // supplemental
-        .engine_rpm = wrap_range(sequence, 700, 7000),
-    };
+    telemetry_packet_t state_copy;
+    if (xSemaphoreTake(current_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+      state_copy = current_state;
+      current_state.sequence++;
+      xSemaphoreGive(current_state_mutex);
+    } else {
+      // hit timeout
+      ESP_LOGW(TAG, "failed to take current_state_mutex");
+      continue;
+    }
 
     uint8_t cbor_buffer[128];  // base msg size is 56 bytes
     size_t encoded_size = 0;
-    encode_telemetry_packet(&packet, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
+    encode_telemetry_packet(&state_copy, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
     cbor_buffer[encoded_size] = '\0';
 
-    // uint8_t slip_buffer[260];
-    // size_t slip_size = 0;
-    // if (!slip_encode(cbor_buffer, encoded_size, slip_buffer, sizeof(slip_buffer), &slip_size)) {
-    //   ESP_LOGE(TAG, "SLIP encoding failed; dropping packet");
-    //   vTaskDelayUntil(&last_wake, period_ticks);
-    //   continue;
-    // }
-
     uart_write_bytes(UART_NUM_1, cbor_buffer, encoded_size);
-    for (size_t i = 0; i < encoded_size; i++) {
-      printf("%02X ", cbor_buffer[i]);
-    }
-    printf("\n\n");
-
-    sequence++;
-    vTaskDelayUntil(&last_wake, period_ticks);
+    // for (size_t i = 0; i < encoded_size; i++) {
+    //   printf("%02X ", cbor_buffer[i]);
+    // }
+    // printf("\n\n");
   }
 }
 
@@ -541,11 +556,11 @@ void app_main(void) {
   twai_node_handle_t node_hdl = NULL;
   ESP_ERROR_CHECK(twai_new_node_onchip(&node_config, &node_hdl));
 
-  // --- twai rx callback + queues
+  // rx callback + queues
 
   can_rx_queue = xQueueCreate(64, sizeof(can_rx_frame_t));
-  ssm_msg_queue = xQueueCreate(8, sizeof(ssm_message_t));
-  if (can_rx_queue == NULL || ssm_msg_queue == NULL) {
+  assembled_isotp_queue = xQueueCreate(8, sizeof(assembled_isotp_t));
+  if (can_rx_queue == NULL || assembled_isotp_queue == NULL) {
     ESP_LOGE(TAG, "Failed to create TWAI queues");
     return;
   }
@@ -579,18 +594,12 @@ void app_main(void) {
 
   current_state_mutex = xSemaphoreCreateMutex();
 
-  /*
-  twai callback needs to be a "producer" that takes the CAN frame and just pushes it to a queue
-  need a task to consume from this queue to assemble a full SSM/UDS message
-    update state when complete
-
-  */
-
   // --- tasks
 
   xTaskCreate(analog_data_task, "analog_data_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(isotp_assembler_task, "isotp_assembler_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
-  xTaskCreate(ssm_processing_task, "ssm_processing_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(assembled_isotp_processing_task, "assembled_isotp_processing_task", 8192, (void*)node_hdl,
+              tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(uart_emitter_task, "uart_emitter_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
   // TODO task for ble/gatt server compatible with solostorm etc.
   // apparently racebox uses "uart over ble" in ubx format
