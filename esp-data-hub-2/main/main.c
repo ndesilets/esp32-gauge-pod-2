@@ -234,7 +234,7 @@ static void send_isotp_flow_control(twai_node_handle_t node_hdl) {
 static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_t* edata, void* user_ctx) {
   (void)edata;
   QueueHandle_t rx_queue = (QueueHandle_t)user_ctx;
-  bool high_task_woken = false;
+  BaseType_t high_task_woken = pdFALSE;
 
   while (1) {
     uint8_t rx_buf[8] = {0};
@@ -256,7 +256,7 @@ static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_
     xQueueSendFromISR(rx_queue, &out, &high_task_woken);
   }
 
-  return high_task_woken;
+  return (high_task_woken == pdTRUE);
 }
 
 void send_ecu_data_request(twai_node_handle_t node_hdl) {
@@ -559,7 +559,6 @@ void app_main(void) {
 
   // --- uart config
 
-#ifndef CONFIG_DH_ENABLE_FAKE_DATA
   uart_config_t uart_config = {
       .baud_rate = 115200,
       .data_bits = UART_DATA_8_BITS,
@@ -575,7 +574,6 @@ void app_main(void) {
   QueueHandle_t uart_queue;
   ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, CONFIG_DH_UART_BUFFER_SIZE, CONFIG_DH_UART_BUFFER_SIZE, 10,
                                       &uart_queue, intr_alloc_flags));
-#endif
 
   // --- init rest of stuff
 
@@ -585,19 +583,15 @@ void app_main(void) {
   twai callback needs to be a "producer" that takes the CAN frame and just pushes it to a queue
   need a task to consume from this queue to assemble a full SSM/UDS message
     update state when complete
-  
+
   */
 
   // --- tasks
 
-#ifdef CONFIG_DH_ENABLE_FAKE_DATA
-  xTaskCreate(send_mock_data, "send_mock_data", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
-#else
   xTaskCreate(analog_data_task, "analog_data_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(isotp_assembler_task, "isotp_assembler_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(ssm_processing_task, "ssm_processing_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(uart_emitter_task, "uart_emitter_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
   // TODO task for ble/gatt server compatible with solostorm etc.
   // apparently racebox uses "uart over ble" in ubx format
-#endif
 }
