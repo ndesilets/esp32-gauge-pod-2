@@ -285,9 +285,6 @@ void send_ecu_data_request(twai_node_handle_t node_hdl) {
   // clang-format on
   const int payload_len = sizeof(ssm_req_payload);
 
-  // assuming max of 16 addresses, or 48+2 byte max payload
-  static_assert(payload_len <= 50, "SSM request payload too large");
-
   // need to be able to hold 50 / 8 (6.25) individual can payloads + ISOTP overhead
   // so 16 CAN frame slots should be sufficient
   uint8_t can_frames[16][8] = {0};
@@ -362,36 +359,30 @@ void isotp_assembler_task(void* arg) {
     last_frame_tick = xTaskGetTickCount();
 
     switch (type) {
-      case ISOTP_SINGLE_FRAME: {
+      case ISOTP_SINGLE_FRAME:
         uint8_t payload_len = pci & 0x0F;
-        if (payload_len > 7) {
-          ESP_LOGW(TAG, "ISO-TP single frame length too large: %d", payload_len);
-          break;
-        }
         if (payload_len > sizeof(buffer)) {
           ESP_LOGW(TAG, "ISO-TP single frame buffer too small");
-          break;
+          continue;
         }
-        memcpy(buffer, &frame.data[1], payload_len);
         assembled_isotp_t msg = {
             .source_id = frame.id,
             .len = payload_len,
         };
-        memcpy(msg.data, buffer, payload_len);
+        memcpy(msg.data, &frame.data[1], payload_len);
         xQueueSend(assembled_isotp_queue, &msg, pdMS_TO_TICKS(10));
         in_progress = false;
         buffer_len = 0;
         payload_length = 0;
         last_seq = 0;
         break;
-      }
-      case ISOTP_FIRST_FRAME: {
+      case ISOTP_FIRST_FRAME:
         uint8_t pci_low = pci & 0x0F;
         payload_length = ((pci_low << 8) | frame.data[1]);
         if (payload_length > sizeof(buffer)) {
           ESP_LOGW(TAG, "ISO-TP payload too large: %d", payload_length);
           in_progress = false;
-          break;
+          continue;
         }
         buffer_len = 0;
         memcpy(buffer, &frame.data[2], 6);
@@ -401,11 +392,10 @@ void isotp_assembler_task(void* arg) {
 
         send_isotp_flow_control(node_hdl);
         break;
-      }
-      case ISOTP_CONSECUTIVE_FRAME: {
+      case ISOTP_CONSECUTIVE_FRAME:
         if (!in_progress) {
           ESP_LOGW(TAG, "ISO-TP consecutive frame without start");
-          break;
+          continue;
         }
         uint8_t seq = pci & 0x0F;
         if (seq != (last_seq + 1) % 16) {
@@ -414,7 +404,7 @@ void isotp_assembler_task(void* arg) {
           buffer_len = 0;
           payload_length = 0;
           last_seq = 0;
-          break;
+          continue;
         }
         last_seq = seq;
 
@@ -436,7 +426,6 @@ void isotp_assembler_task(void* arg) {
           last_seq = 0;
         }
         break;
-      }
       case ISOTP_FLOW_CONTROL_FRAME:
         ESP_LOGW(TAG, "unexpected ISO-TP flow control frame");
         break;
@@ -461,10 +450,8 @@ void send_abs_data_request(twai_node_handle_t node_hdl) {
 
   // --- assemble iso-tp frames
 
-  // assuming this is only ever going to send multi-frame ISO-TP messages
-
   uint8_t can_frame[8] = {0};
-  can_frame[0] = 0x00 | (sizeof(uds_req_payload) & 0x0F);
+  can_frame[0] = ISOTP_SINGLE_FRAME | (sizeof(uds_req_payload) & 0x0F);
   memcpy(&can_frame[1], &uds_req_payload[0], sizeof(uds_req_payload));
 
   // --- send frame over canbus
