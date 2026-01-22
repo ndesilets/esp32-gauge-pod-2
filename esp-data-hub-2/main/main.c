@@ -248,6 +248,7 @@ static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_
         .buffer_len = sizeof(rx_buf),
     };
     if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK) {
+      ESP_LOGE(TAG, "twai_node_receive_from_isr failed");
       break;
     }
 
@@ -291,6 +292,8 @@ void send_ecu_data_request(twai_node_handle_t node_hdl) {
 
   // --- assemble iso-tp frames
 
+  // TODO generic ISO-TP framing function
+
   // assuming this is only ever going to send multi-frame ISO-TP messages
 
   // first frame (FF)
@@ -314,6 +317,8 @@ void send_ecu_data_request(twai_node_handle_t node_hdl) {
 
   // --- send frames over canbus
 
+  ESP_LOGI(TAG, "Sending ECU request");
+
   for (int i = 0; i < can_frame_idx; i++) {
     twai_frame_t msg = {
         .header.id = 0x7E0,       // Message ID
@@ -323,6 +328,8 @@ void send_ecu_data_request(twai_node_handle_t node_hdl) {
     };
     ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
   }
+
+  ESP_LOGI(TAG, "Sent ECU request");
 }
 
 // assembles isotp message from responses for only one request.
@@ -353,6 +360,8 @@ void isotp_assembler_task(void* arg) {
     if (frame.id != 0x7E8 && frame.id != 0x7B8) {
       continue;
     }
+
+    ESP_LOGI(TAG, "Got a frame I care about: ID=0x%03X", frame.id);
 
     uint8_t pci = frame.data[0];
     uint8_t type = pci & 0xF0;
@@ -469,11 +478,17 @@ void assembled_isotp_processing_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
 
   while (1) {
+    vTaskDelay(pdMS_TO_TICKS(63));  // start with ~16hz, similar to accessport
+
+    ESP_LOGI(TAG, "Requesting ECU data");
+
     send_ecu_data_request(node_hdl);
     assembled_isotp_t msg;
     if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
       continue;
     }
+
+    ESP_LOGI(TAG, "Got ECU data");
 
     // TODO parse msg.data
     // TODO update state with ecu data
@@ -485,8 +500,6 @@ void assembled_isotp_processing_task(void* arg) {
 
     // TODO parse msg.data
     // TODO update state with abs data
-
-    vTaskDelay(pdMS_TO_TICKS(63));  // start with ~16hz, similar to accessport
   }
 }
 
