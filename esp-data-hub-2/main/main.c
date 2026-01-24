@@ -169,6 +169,37 @@ void send_mock_data(void* arg) {
   }
 }
 
+// --- TWAI rx callback
+
+// takes raw CAN frames and pushes them to a queue for further processing outside of an ISR
+static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_t* edata, void* user_ctx) {
+  (void)edata;
+  QueueHandle_t rx_queue = (QueueHandle_t)user_ctx;
+  BaseType_t high_task_woken = pdFALSE;
+
+  while (1) {
+    uint8_t rx_buf[8] = {0};
+    twai_frame_t rx_frame = {
+        .buffer = rx_buf,
+        .buffer_len = sizeof(rx_buf),
+    };
+    if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK) {
+      // TODO some mechanism of reporting errors/dropped frames
+      break;
+    }
+
+    can_rx_frame_t out = {
+        .id = rx_frame.header.id,
+        .ide = rx_frame.header.ide,
+        .data_len = (rx_frame.header.dlc <= 8) ? rx_frame.header.dlc : 8,
+    };
+    memcpy(out.data, rx_buf, out.data_len);
+    xQueueSendFromISR(rx_queue, &out, &high_task_woken);
+  }
+
+  return (high_task_woken == pdTRUE);
+}
+
 // --- analog sensor stuff
 
 void analog_data_task(void* arg) {
@@ -237,34 +268,6 @@ first byte is service ID
   ex: 62 10 29 00 01 ...
  */
 
-// takes raw CAN frames and pushes them to a queue for further processing outside of an ISR
-static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_t* edata, void* user_ctx) {
-  (void)edata;
-  QueueHandle_t rx_queue = (QueueHandle_t)user_ctx;
-  BaseType_t high_task_woken = pdFALSE;
-
-  while (1) {
-    uint8_t rx_buf[8] = {0};
-    twai_frame_t rx_frame = {
-        .buffer = rx_buf,
-        .buffer_len = sizeof(rx_buf),
-    };
-    if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK) {
-      break;
-    }
-
-    can_rx_frame_t out = {
-        .id = rx_frame.header.id,
-        .ide = rx_frame.header.ide,
-        .data_len = (rx_frame.header.dlc <= 8) ? rx_frame.header.dlc : 8,
-    };
-    memcpy(out.data, rx_buf, out.data_len);
-    xQueueSendFromISR(rx_queue, &out, &high_task_woken);
-  }
-
-  return (high_task_woken == pdTRUE);
-}
-
 // sends single FC frame specifying full speed no delay
 static void send_isotp_flow_control(twai_node_handle_t node_hdl, uint32_t to) {
   uint8_t fc_data[3] = {ISOTP_FLOW_CONTROL_FRAME, 0, 0};  // let 'er eat bud
@@ -283,9 +286,6 @@ static bool isotp_wrap_payload(const uint8_t* payload, uint16_t payload_len, uin
   if (!payload || !frames || !out_frame_count || max_frames == 0) {
     return false;
   }
-
-  // TODO more validation logic but also i'm down to shoot myself in the foot
-  // (who needs feet anyway)
 
   *out_frame_count = 0;
 
@@ -414,6 +414,7 @@ void send_abs_data_request(twai_node_handle_t node_hdl) {
   ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
 }
 
+// sends requests for car data, parses responses, and updates state
 void car_data_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
 
@@ -535,7 +536,10 @@ void car_data_task(void* arg) {
         frames[frame_idx++] = frame;
       }
 
-      isotp_unwrap_frames(frames, frame_idx, assembled.data, sizeof(assembled.data), &assembled.len);
+      if (!isotp_unwrap_frames(frames, frame_idx, assembled.data, sizeof(assembled.data), &assembled.len)) {
+        ESP_LOGW(TAG, "Failed to unwrap ISO-TP frames from ECU");
+        continue;
+      }
     }
 
     // TODO parse msg.data
