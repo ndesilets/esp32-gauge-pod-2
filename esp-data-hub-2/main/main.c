@@ -28,6 +28,11 @@ static const char* TAG = "data_hub";
 telemetry_packet_t current_state = {};
 SemaphoreHandle_t current_state_mutex;
 
+#define ECU_REQ_ID 0x7E0
+#define ECU_RES_ID 0x7E8
+#define ABS_REQ_ID 0x7B0
+#define ABS_RES_ID 0x7B8  // TODO: this is probably more accurate as VDC
+
 // --- twai queues
 
 typedef struct {
@@ -37,17 +42,30 @@ typedef struct {
   uint8_t data_len;
 } can_rx_frame_t;
 
+#define ISOTP_FC_BS_LET_ER_EAT_BUD 0x00
+#define ISOTP_FC_BS_CONTINUE 0x01
+#define ISOTP_FC_BS_WAIT 0x02
+#define ISOTP_FC_BS_ABORT 0x03
+
+#define ISOTP_SINGLE_FRAME 0x00
+#define ISOTP_FIRST_FRAME 0x10
+#define ISOTP_CONSECUTIVE_FRAME 0x20
+#define ISOTP_FLOW_CONTROL_FRAME 0x30
+
 typedef struct {
   uint32_t source_id;
   size_t len;
   uint8_t data[128];
 } assembled_isotp_t;
 
-static QueueHandle_t can_rx_queue = NULL;
-static QueueHandle_t assembled_isotp_queue = NULL;
+static QueueHandle_t can_rx_queue = NULL;           // raw can frames
+static QueueHandle_t ecu_can_frames = NULL;         // can frames from 0x7E8
+static QueueHandle_t abs_can_frames = NULL;         // can frames from 0x7B8
+static QueueHandle_t assembled_isotp_queue = NULL;  // assembled isotp messages
 
 // --- cbor encoder
 
+// cbor encode telemetry packet into buffer, returns size used
 void encode_telemetry_packet(const telemetry_packet_t* packet, uint8_t* buffer, size_t buffer_size,
                              size_t* encoded_size) {
   CborEncoder encoder, array_encoder;
@@ -219,22 +237,6 @@ first byte is service ID
   ex: 62 10 29 00 01 ...
  */
 
-#define ISOTP_SINGLE_FRAME 0x00
-#define ISOTP_FIRST_FRAME 0x10
-#define ISOTP_CONSECUTIVE_FRAME 0x20
-#define ISOTP_FLOW_CONTROL_FRAME 0x30
-
-static void send_isotp_flow_control(twai_node_handle_t node_hdl) {
-  uint8_t fc_data[3] = {ISOTP_FLOW_CONTROL_FRAME, 0, 0};
-  twai_frame_t fc_msg = {
-      .header.id = 0x7E8,
-      .header.ide = false,
-      .buffer = fc_data,
-      .buffer_len = sizeof(fc_data),
-  };
-  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &fc_msg, pdMS_TO_TICKS(100)));
-}
-
 // takes raw CAN frames and pushes them to a queue for further processing outside of an ISR
 static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_t* edata, void* user_ctx) {
   (void)edata;
@@ -248,7 +250,6 @@ static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_
         .buffer_len = sizeof(rx_buf),
     };
     if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK) {
-      ESP_LOGE(TAG, "twai_node_receive_from_isr failed");
       break;
     }
 
@@ -258,191 +259,130 @@ static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_
         .data_len = (rx_frame.header.dlc <= 8) ? rx_frame.header.dlc : 8,
     };
     memcpy(out.data, rx_buf, out.data_len);
-
     xQueueSendFromISR(rx_queue, &out, &high_task_woken);
   }
 
   return (high_task_woken == pdTRUE);
 }
 
-void send_ecu_data_request(twai_node_handle_t node_hdl) {
-  // --- ssm payload
-
-  // ssm payload with no iso-tp framing etc.
-  // clang-format off
-  uint8_t ssm_req_payload[] = {
-      0xA8, 0x00,        // read memory by addr list, padding mode 0
-      0x00, 0x00, 0x08,  // coolant
-      0x00, 0x00, 0x09,  // af correction #1
-      0x00, 0x00, 0x0A,  // af learning #1
-      0x00, 0x00, 0x0E,  // engine rpm
-      0x00, 0x00, 0x12,  // intake air temperature
-      // TODO injector duty cycle
-      0x00, 0x00, 0x46,  // afr
-      0xFF, 0x6B, 0x49,  // DAM
-      0xFF, 0x88, 0x10,  // knock correction
-      // TODO ethanol concentration
+// sends single FC frame specifying full speed no delay
+static void send_isotp_flow_control(twai_node_handle_t node_hdl, uint32_t to) {
+  uint8_t fc_data[3] = {ISOTP_FLOW_CONTROL_FRAME, 0, 0};  // let 'er eat bud
+  twai_frame_t fc_msg = {
+      .header.id = to,
+      .header.ide = false,
+      .buffer = fc_data,
+      .buffer_len = sizeof(fc_data),
   };
-  // clang-format on
-  const int payload_len = sizeof(ssm_req_payload);
-
-  // need to be able to hold 50 / 8 (6.25) individual can payloads + ISOTP overhead
-  // so 16 CAN frame slots should be sufficient
-  uint8_t can_frames[16][8] = {0};
-
-  // --- assemble iso-tp frames
-
-  // TODO generic ISO-TP framing function
-
-  // assuming this is only ever going to send multi-frame ISO-TP messages
-
-  // first frame (FF)
-  can_frames[0][0] = 0x10 | ((payload_len >> 8) & 0x0F);
-  can_frames[0][1] = payload_len & 0xFF;
-  memcpy(&can_frames[0][2], &ssm_req_payload[0], 6);
-
-  // consecutive frames (CF)
-  int offset = 6;
-  int can_frame_idx;
-  for (can_frame_idx = 1; offset < payload_len && can_frame_idx < 16; can_frame_idx++) {
-    // set chunk size (min of remaining bytes or 7)
-    int remaining = payload_len - offset;
-    int chunk = (remaining > 7) ? 7 : remaining;
-
-    can_frames[can_frame_idx][0] = 0x20 | (can_frame_idx & 0x0F);
-    memcpy(&can_frames[can_frame_idx][1], &ssm_req_payload[offset], chunk);
-
-    offset += chunk;
-  }
-
-  // --- send frames over canbus
-
-  ESP_LOGI(TAG, "Sending ECU request");
-
-  for (int i = 0; i < can_frame_idx; i++) {
-    twai_frame_t msg = {
-        .header.id = 0x7E0,       // Message ID
-        .header.ide = false,      // Use 29-bit extended ID format
-        .buffer = can_frames[i],  // Pointer to data to transmit
-        .buffer_len = 8,          // Length of data to transmit
-    };
-    ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
-  }
-
-  ESP_LOGI(TAG, "Sent ECU request");
+  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &fc_msg, pdMS_TO_TICKS(100)));
 }
 
-// assembles isotp message from responses for only one request.
-void isotp_assembler_task(void* arg) {
-  twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
+// generates iso-tp framed messages for a given payload. can frame buffer should probably be zeroed out beforehand
+static bool isotp_wrap_payload(const uint8_t* payload, uint16_t payload_len, uint8_t frames[][8], size_t max_frames,
+                               size_t* out_frame_count) {
+  if (!payload || !frames || !out_frame_count || max_frames == 0) {
+    return false;
+  }
 
-  uint8_t buffer[128] = {0};
-  size_t buffer_len = 0;
-  uint16_t payload_length = 0;
-  uint8_t last_seq = 0;
-  bool in_progress = false;
-  TickType_t last_frame_tick = 0;
-  const TickType_t frame_timeout = pdMS_TO_TICKS(100);
+  // TODO more validation logic but also i'm down to shoot myself in the foot
+  // (who needs feet anyway)
 
-  while (1) {
-    can_rx_frame_t frame;
-    if (xQueueReceive(can_rx_queue, &frame, pdMS_TO_TICKS(50)) != pdTRUE) {
-      if (in_progress && (xTaskGetTickCount() - last_frame_tick) > frame_timeout) {
-        ESP_LOGW(TAG, "ISO-TP timeout, resetting assembly");
-        in_progress = false;
-        buffer_len = 0;
-        payload_length = 0;
-        last_seq = 0;
-      }
-      continue;
-    }
+  *out_frame_count = 0;
 
-    if (frame.id != 0x7E8 && frame.id != 0x7B8) {
-      continue;
-    }
+  if (payload_len <= 7) {
+    frames[0][0] = ISOTP_SINGLE_FRAME | (uint8_t)(payload_len & 0x0F);
+    memcpy(&frames[0][1], payload, payload_len);
+    *out_frame_count = 1;
+    return true;
+  }
 
-    ESP_LOGI(TAG, "Got a frame I care about: ID=0x%03X", frame.id);
+  frames[0][0] = ISOTP_FIRST_FRAME | (uint8_t)((payload_len >> 8) & 0x0F);
+  frames[0][1] = (uint8_t)(payload_len & 0xFF);
+  memcpy(&frames[0][2], payload, 6);
 
-    uint8_t pci = frame.data[0];
-    uint8_t type = pci & 0xF0;
-    last_frame_tick = xTaskGetTickCount();
+  size_t offset = 6;
+  size_t frame_idx = 1;
+  uint8_t seq = 1;
+  while (offset < payload_len && frame_idx < max_frames) {
+    const size_t remaining = payload_len - offset;
+    const size_t chunk = (remaining > 7) ? 7 : remaining;
 
-    switch (type) {
-      case ISOTP_SINGLE_FRAME:
-        uint8_t payload_len = pci & 0x0F;
-        if (payload_len > sizeof(buffer)) {
-          ESP_LOGW(TAG, "ISO-TP single frame buffer too small");
-          continue;
-        }
-        assembled_isotp_t msg = {
-            .source_id = frame.id,
-            .len = payload_len,
-        };
-        memcpy(msg.data, &frame.data[1], payload_len);
-        xQueueSend(assembled_isotp_queue, &msg, pdMS_TO_TICKS(10));
-        in_progress = false;
-        buffer_len = 0;
-        payload_length = 0;
-        last_seq = 0;
-        break;
-      case ISOTP_FIRST_FRAME:
-        uint8_t pci_low = pci & 0x0F;
-        payload_length = ((pci_low << 8) | frame.data[1]);
-        if (payload_length > sizeof(buffer)) {
-          ESP_LOGW(TAG, "ISO-TP payload too large: %d", payload_length);
-          in_progress = false;
-          continue;
-        }
-        buffer_len = 0;
-        memcpy(buffer, &frame.data[2], 6);
-        buffer_len += 6;
-        last_seq = 0;
-        in_progress = true;
+    frames[frame_idx][0] = ISOTP_CONSECUTIVE_FRAME | (seq & 0x0F);
+    memcpy(&frames[frame_idx][1], payload + offset, chunk);
 
-        send_isotp_flow_control(node_hdl);
-        break;
-      case ISOTP_CONSECUTIVE_FRAME:
-        if (!in_progress) {
-          ESP_LOGW(TAG, "ISO-TP consecutive frame without start");
-          continue;
-        }
-        uint8_t seq = pci & 0x0F;
-        if (seq != (last_seq + 1) % 16) {
-          ESP_LOGW(TAG, "ISO-TP consecutive frame out of order (expected %d, got %d)", (last_seq + 1) % 16, seq);
-          in_progress = false;
-          buffer_len = 0;
-          payload_length = 0;
-          last_seq = 0;
-          continue;
-        }
-        last_seq = seq;
-
-        size_t remaining = payload_length - buffer_len;
-        size_t copy_len = (remaining > 7) ? 7 : remaining;
-        memcpy(buffer + buffer_len, &frame.data[1], copy_len);
-        buffer_len += copy_len;
-
-        if (buffer_len >= payload_length) {
-          assembled_isotp_t msg = {
-              .source_id = frame.id,
-              .len = payload_length,
-          };
-          memcpy(msg.data, buffer, payload_length);
-          xQueueSend(assembled_isotp_queue, &msg, pdMS_TO_TICKS(10));
-          in_progress = false;
-          buffer_len = 0;
-          payload_length = 0;
-          last_seq = 0;
-        }
-        break;
-      case ISOTP_FLOW_CONTROL_FRAME:
-        ESP_LOGW(TAG, "unexpected ISO-TP flow control frame");
-        break;
-      default:
-        ESP_LOGE(TAG, "unexpected ISO-TP frame type");
-        break;
+    offset += chunk;
+    frame_idx++;
+    seq = (seq + 1) & 0x0F;
+    if (seq == 0) {
+      seq = 1;
     }
   }
+
+  *out_frame_count = frame_idx;
+  return (offset >= payload_len);
+}
+
+// unwraps ISO-TP frames into a flat payload buffer
+static bool isotp_unwrap_frames(const can_rx_frame_t frames[16], size_t frame_count, uint8_t* out_payload,
+                                size_t out_payload_size, size_t* out_payload_len) {
+  if (!frames || !out_payload || !out_payload_len || frame_count == 0) {
+    return false;
+  }
+
+  const uint8_t pci = frames[0].data[0];
+  const uint8_t type = pci & 0xF0;
+
+  if (type == ISOTP_SINGLE_FRAME) {
+    const uint8_t payload_len = pci & 0x0F;
+    if (payload_len > 7 || out_payload_size < payload_len) {
+      return false;
+    }
+    memcpy(out_payload, &frames[0].data[1], payload_len);
+    *out_payload_len = payload_len;
+    return true;
+  }
+
+  if (type == ISOTP_FIRST_FRAME) {
+    const uint16_t payload_len = ((pci & 0x0F) << 8) | frames[0].data[1];
+    if (out_payload_size < payload_len) {
+      return false;
+    }
+
+    size_t offset = 0;
+    memcpy(out_payload, &frames[0].data[2], 6);
+    offset += 6;
+
+    uint8_t expected_seq = 1;
+    for (size_t i = 1; i < frame_count && offset < payload_len; i++) {
+      const uint8_t cf_pci = frames[i].data[0];
+      if ((cf_pci & 0xF0) != ISOTP_CONSECUTIVE_FRAME) {
+        return false;
+      }
+      const uint8_t seq = cf_pci & 0x0F;
+      if (seq != expected_seq) {
+        return false;
+      }
+
+      const size_t remaining = payload_len - offset;
+      const size_t chunk = (remaining > 7) ? 7 : remaining;
+      memcpy(out_payload + offset, &frames[i].data[1], chunk);
+      offset += chunk;
+
+      expected_seq = (expected_seq + 1) & 0x0F;
+      if (expected_seq == 0) {
+        expected_seq = 1;
+      }
+    }
+
+    if (offset != payload_len) {
+      return false;
+    }
+
+    *out_payload_len = payload_len;
+    return true;
+  }
+
+  return false;
 }
 
 void send_abs_data_request(twai_node_handle_t node_hdl) {
@@ -474,32 +414,174 @@ void send_abs_data_request(twai_node_handle_t node_hdl) {
   ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
 }
 
-void assembled_isotp_processing_task(void* arg) {
+void car_data_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
 
   while (1) {
     vTaskDelay(pdMS_TO_TICKS(63));  // start with ~16hz, similar to accessport
 
-    ESP_LOGI(TAG, "Requesting ECU data");
+    // --- ECU DATA
 
-    send_ecu_data_request(node_hdl);
-    assembled_isotp_t msg;
-    if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
+    // 1. generate ecu data request
+
+    // ssm payload with no iso-tp framing etc.
+    // clang-format off
+    uint8_t ssm_req_payload[] = {
+        0xA8, 0x00,        // read memory by addr list, padding mode 0
+        0x00, 0x00, 0x08,  // coolant
+        0x00, 0x00, 0x09,  // af correction #1
+        0x00, 0x00, 0x0A,  // af learning #1
+        0x00, 0x00, 0x0E,  // engine rpm
+        0x00, 0x00, 0x12,  // intake air temperature
+        // TODO injector duty cycle
+        0x00, 0x00, 0x46,  // afr
+        0xFF, 0x6B, 0x49,  // DAM
+        0xFF, 0x88, 0x10,  // knock correction
+        // TODO ethanol concentration
+    };
+    // clang-format on
+    const int payload_len = sizeof(ssm_req_payload);
+
+    // need to be able to hold 50 / 8 (6.25) individual can payloads + ISOTP overhead
+    // so 16 CAN frame slots should be sufficient
+    uint8_t can_frames[16][8] = {0};
+    size_t isotp_frame_count = 0;
+    if (!isotp_wrap_payload(ssm_req_payload, payload_len, can_frames, 16, &isotp_frame_count)) {
+      ESP_LOGE(TAG, "Failed to build ISO-TP frames for ECU data request");
       continue;
     }
 
-    ESP_LOGI(TAG, "Got ECU data");
+    // 2. send first frame of ecu data request
+
+    twai_frame_t msg = {
+        .header.id = ECU_REQ_ID,
+        .header.ide = false,
+        .buffer = can_frames[0],
+        .buffer_len = (isotp_frame_count > 1) ? 8 : (payload_len + 1),
+    };
+    ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(100)));
+
+    // 3. wait for flow control frame from ecu
+
+    if (isotp_frame_count > 1) {
+      can_rx_frame_t frame = {0};
+      if (xQueueReceive(ecu_can_frames, &frame, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGW(TAG, "Didn't receive FC frame from ECU");
+        continue;
+      }
+
+      if ((frame.data[0] & 0xF0) != ISOTP_FLOW_CONTROL_FRAME) {
+        ESP_LOGW(TAG, "Unexpected FC frame from ECU: 0x%02X", frame.data[0]);
+        continue;
+      }
+
+      if ((frame.data[0] & 0x0F) != ISOTP_FC_BS_LET_ER_EAT_BUD) {
+        ESP_LOGW(TAG, "Unexpected FC not telling us to let er eat brother! 0x%02X", frame.data[0]);
+        continue;
+      }
+    }
+
+    // 4. send remaining frames of ecu data request (based on FC info)
+
+    if (isotp_frame_count > 1) {
+      for (uint8_t i = 1; i < isotp_frame_count; i++) {
+        twai_frame_t cf_msg = {
+            .header.id = ECU_REQ_ID,
+            .header.ide = false,
+            .buffer = can_frames[i],
+            .buffer_len = 8,
+        };
+        ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &cf_msg, pdMS_TO_TICKS(100)));
+      }
+    }
+
+    // 5. wait and gather response frames
+
+    can_rx_frame_t frame = {0};
+    if (xQueueReceive(ecu_can_frames, &frame, portMAX_DELAY) != pdTRUE) {
+      ESP_LOGW(TAG, "Didn't receive response from ECU");
+      continue;
+    }
+
+    // send FC frame if needed
+
+    if ((frame.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
+      send_isotp_flow_control(node_hdl, ECU_REQ_ID);
+    }
+
+    // 7. assemble response frames into complete message
+
+    assembled_isotp_t assembled = {
+        .source_id = ECU_RES_ID,
+    };
+
+    if ((frame.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
+      assembled.len = frame.data[0] & 0x0F;
+      memcpy(assembled.data, &frame.data[1], assembled.len);
+    } else {
+      assembled.len = ((frame.data[0] & 0x0F) << 8) | frame.data[1];
+
+      can_rx_frame_t frames[16] = {0};
+      uint8_t frame_idx = 0;
+      frames[frame_idx++] = frame;
+
+      if (xQueueReceive(ecu_can_frames, &frame, portMAX_DELAY) != pdTRUE) {
+        continue;
+      }
+      frames[frame_idx++] = frame;
+
+      // drain any backlog without blocking
+      while (frame_idx < (sizeof(frames) / sizeof(frames[0])) && xQueueReceive(ecu_can_frames, &frame, 0) == pdTRUE) {
+        frames[frame_idx++] = frame;
+      }
+
+      isotp_unwrap_frames(frames, frame_idx, assembled.data, sizeof(assembled.data), &assembled.len);
+    }
 
     // TODO parse msg.data
     // TODO update state with ecu data
 
-    send_abs_data_request(node_hdl);
-    if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
-      continue;
-    }
+    // --- ABS DATA
+
+    // send_abs_data_request(node_hdl);
+    // if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
+    //   continue;
+    // }
 
     // TODO parse msg.data
     // TODO update state with abs data
+  }
+}
+
+// --- can frame dispatcher (pulls from ISR queue and routes to appropriate queues)
+
+void dispatch_can_frame(can_rx_frame_t* frame) {
+  switch (frame->id) {
+    case ECU_RES_ID:
+      xQueueSend(ecu_can_frames, frame, pdMS_TO_TICKS(10));
+      break;
+    case ABS_RES_ID:
+      xQueueSend(abs_can_frames, frame, pdMS_TO_TICKS(10));
+      break;
+    default:
+      ESP_LOGW(TAG, "Unhandled CAN frame ID: 0x%03X", frame->id);
+      break;
+  }
+}
+
+void can_rx_dispatcher_task(void* arg) {
+  while (1) {
+    can_rx_frame_t frame;
+    if (xQueueReceive(can_rx_queue, &frame, portMAX_DELAY) != pdTRUE) {
+      continue;
+    }
+
+    dispatch_can_frame(&frame);
+
+    // drain any backlog without blocking
+    while (xQueueReceive(can_rx_queue, &frame, 0) == pdTRUE) {
+      dispatch_can_frame(&frame);
+    }
   }
 }
 
@@ -558,9 +640,12 @@ void app_main(void) {
 
   // rx callback + queues
 
-  can_rx_queue = xQueueCreate(64, sizeof(can_rx_frame_t));
-  assembled_isotp_queue = xQueueCreate(8, sizeof(assembled_isotp_t));
-  if (can_rx_queue == NULL || assembled_isotp_queue == NULL) {
+  can_rx_queue = xQueueCreate(16, sizeof(can_rx_frame_t));
+  ecu_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
+  abs_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
+  assembled_isotp_queue = xQueueCreate(16, sizeof(assembled_isotp_t));
+
+  if (can_rx_queue == NULL || assembled_isotp_queue == NULL || ecu_can_frames == NULL || abs_can_frames == NULL) {
     ESP_LOGE(TAG, "Failed to create TWAI queues");
     return;
   }
@@ -569,7 +654,6 @@ void app_main(void) {
       .on_rx_done = twai_rx_cb,
   };
   ESP_ERROR_CHECK(twai_node_register_event_callbacks(node_hdl, &twai_cbs, can_rx_queue));
-
   ESP_ERROR_CHECK(twai_node_enable(node_hdl));
 
   // --- uart config
@@ -596,10 +680,9 @@ void app_main(void) {
 
   // --- tasks
 
+  xTaskCreate(car_data_task, "car_data_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(can_rx_dispatcher_task, "can_rx_dispatcher_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(analog_data_task, "analog_data_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
-  xTaskCreate(isotp_assembler_task, "isotp_assembler_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
-  xTaskCreate(assembled_isotp_processing_task, "assembled_isotp_processing_task", 8192, (void*)node_hdl,
-              tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(uart_emitter_task, "uart_emitter_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
   // TODO task for ble/gatt server compatible with solostorm etc.
   // apparently racebox uses "uart over ble" in ubx format
