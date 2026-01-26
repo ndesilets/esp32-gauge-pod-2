@@ -225,30 +225,6 @@ void analog_data_task(void* arg) {
 // --- ssm/uds stuff
 
 /*
-ISO-TP notes
-
-CAN IDs
-0x7E0 = ecu request
-0x7E8 = ecu response
-
-pci_byte = raw_message["payload"][0]
-pci_high = (pci_byte & 0xF0) >> 4 # frame type
-pci_low = pci_byte & 0x0F # frame specific data (like length or sequence #)
-
-SINGLE_FRAME = 0x0
-  pci_low will have length encoded into it
-FIRST_FRAME = 0x1
-  pci_low will be the MS 4 bits of the data length, first payload byte will be the rest of the 8 bits (12 bits total, up
-to 4095 bytes)
-  ((pci_low << 8) | payload[1])
-CONSECUTIVE_FRAME = 0x2
-  pci_low will be the sequence number
-FLOW_CONTROL = 0x3
-  ecu always seems to indicate full speed, so its probably safe to ignore (famous last words)
-  at the very least should check if pci_low != 0 (would indicate wait or overflow)
-
----
-
 SSM notes
 
 all memory addresses are 24-bit
@@ -279,6 +255,107 @@ first byte is service ID
 0x62 = Response to ReadDataByIdentifier
   response is set of 16-bit identifier plus 16-bit value
   ex: 62 10 29 00 01 ...
+  */
+
+/*
+  0xA8, 0x00,        // read memory by addr list, padding mode 0
+  0x00, 0x00, 0x08,  // coolant
+  0x00, 0x00, 0x09,  // af correction #1
+  0x00, 0x00, 0x0A,  // af learning #1
+  0x00, 0x00, 0x0E,  // engine rpm
+  0x00, 0x00, 0x12,  // intake air temperature
+  // TODO injector duty cycle
+  0x00, 0x00, 0x46,  // afr
+  0xFF, 0x6B, 0x49,  // DAM
+  0xFF, 0x88, 0x10,  // knock correction
+  // TODO ethanol concentration
+*/
+
+// TODO figure out better way of having telemetry_type_t and this since they're largely the same
+typedef struct {
+  // primary
+  float water_temp;
+  float oil_temp;
+  float oil_pressure;
+
+  float dam;
+  float af_learned;
+  float af_ratio;
+  float int_temp;
+
+  float fb_knock;
+  float af_correct;
+  float inj_duty;
+  float eth_conc;
+
+  // supplemental
+  float engine_rpm;
+} ssm_ecu_response_t;
+
+static inline float ssm_ecu_parse_coolant_temp(uint8_t value) { return 32.0f + 9.0f * ((float)value - 40.0f) / 5.0f; }
+
+static inline float ssm_ecu_parse_af_correction(uint8_t value) { return ((float)value - 128.0f) * 100.0f / 128.0f; }
+
+static inline float ssm_ecu_parse_af_learning(uint8_t value) { return ((float)value - 128.0f) * 100.0f / 128.0f; }
+
+static inline float ssm_ecu_parse_rpm(uint16_t value) { return (float)value / 4.0f; }
+
+static inline float ssm_ecu_parse_intake_air_temp(uint8_t value) {
+  return 32.0f + 9.0f * ((float)value - 40.0f) / 5.0f;
+}
+
+static inline float ssm_ecu_parse_afr(uint8_t value) { return (float)value * 14.7f / 128.0f; }
+
+static inline float ssm_ecu_parse_dam(uint32_t value) {
+  float out;
+  memcpy(&out, &value, sizeof(out));
+  return out;
+}
+
+static inline float ssm_ecu_parse_feedback_knock(uint32_t value) {
+  float out;
+  memcpy(&out, &value, sizeof(out));
+  return out;
+}
+
+void ssm_parse_message(uint8_t ssm_payload[], uint8_t length, ssm_ecu_response_t* response) {
+  // ssm_payload structure doesn't change
+  response->water_temp = ssm_ecu_parse_coolant_temp(ssm_payload[0]);
+  response->af_correct = ssm_ecu_parse_af_correction(ssm_payload[1]);
+  response->af_learned = ssm_ecu_parse_af_learning(ssm_payload[2]);
+  response->engine_rpm = ssm_ecu_parse_rpm((uint16_t)((ssm_payload[3] << 8) | ssm_payload[4]));
+  response->int_temp = ssm_ecu_parse_intake_air_temp(ssm_payload[5]);
+  response->af_ratio = ssm_ecu_parse_afr(ssm_payload[6]);
+  response->dam = ssm_ecu_parse_dam((uint32_t)(ssm_payload[7] << 24 | ssm_payload[8] << 16 | ssm_payload[9]) << 8 |
+                                    ssm_payload[10]);
+  response->fb_knock = ssm_ecu_parse_feedback_knock(
+      (uint32_t)(ssm_payload[11] << 24 | ssm_payload[12] << 16 | ssm_payload[13] << 8 | ssm_payload[14]));
+}
+
+// --- iso-tp stuff
+
+/*
+ISO-TP notes
+
+CAN IDs
+0x7E0 = ecu request
+0x7E8 = ecu response
+
+pci_byte = raw_message["payload"][0]
+pci_high = (pci_byte & 0xF0) >> 4 # frame type
+pci_low = pci_byte & 0x0F # frame specific data (like length or sequence #)
+
+SINGLE_FRAME = 0x0
+  pci_low will have length encoded into it
+FIRST_FRAME = 0x1
+  pci_low will be the MS 4 bits of the data length, first payload byte will be the rest of the 8 bits (12 bits total, up
+to 4095 bytes)
+  ((pci_low << 8) | payload[1])
+CONSECUTIVE_FRAME = 0x2
+  pci_low will be the sequence number
+FLOW_CONTROL = 0x3
+  ecu always seems to indicate full speed, so its probably safe to ignore (famous last words)
+  at the very least should check if pci_low != 0 (would indicate wait or overflow)
  */
 
 // sends single FC frame specifying full speed no delay
@@ -617,8 +694,22 @@ void car_data_task(void* arg) {
       }
     }
 
-    // TODO parse msg.data
-    // TODO update state with ecu data
+    // 8. parse msg.data
+
+    ssm_ecu_response_t response;
+    ssm_parse_message(assembled.data, assembled.len, &response);
+
+    if (xSemaphoreTake(current_state_mutex, 0) == pdTRUE) {
+      current_state.water_temp = response.water_temp;
+      current_state.af_correct = response.af_correct;
+      current_state.af_learned = response.af_learned;
+      current_state.engine_rpm = response.engine_rpm;
+      current_state.int_temp = response.int_temp;
+      current_state.af_ratio = response.af_ratio;
+      current_state.dam = response.dam;
+      current_state.fb_knock = response.fb_knock;
+      xSemaphoreGive(current_state_mutex);
+    }
 
     // --- ABS DATA
 
