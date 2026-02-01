@@ -6,6 +6,12 @@ config DH_ENABLE_FAKE_DATA
     help
         Generate fake telemetry data for testing purposes when enabled.
 
+config DH_UART_ENABLED
+    bool "Enable UART telemetry"
+    default y
+    help
+        Enable UART telemetry connection for data transmission.
+
 config DH_UART_BUFFER_SIZE
     int "UART buffer size"
     range 64 4096
