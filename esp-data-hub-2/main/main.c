@@ -184,31 +184,28 @@ static bool twai_rx_cb(twai_node_handle_t handle, const twai_rx_done_event_data_
   QueueHandle_t rx_queue = (QueueHandle_t)user_ctx;
   BaseType_t high_task_woken = pdFALSE;
 
-  const uint8_t max_frames_per_isr = 4;
-  for (uint8_t i = 0; i < max_frames_per_isr; i++) {
-    uint8_t rx_buf[8] = {0};
-    twai_frame_t rx_frame = {
-        .buffer = rx_buf,
-        .buffer_len = sizeof(rx_buf),
-    };
-    if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK) {
-      // TODO some mechanism of reporting errors/dropped frames
-      break;
-    }
-
-    if (rx_frame.header.id != 0x7E8 && rx_frame.header.id != 0x7B8) {
-      // not an id we care about
-      continue;
-    }
-
-    can_rx_frame_t out = {
-        .id = rx_frame.header.id,
-        .ide = rx_frame.header.ide,
-        .data_len = (rx_frame.header.dlc <= 8) ? rx_frame.header.dlc : 8,
-    };
-    memcpy(out.data, rx_buf, out.data_len);
-    xQueueSendFromISR(rx_queue, &out, &high_task_woken);
+  uint8_t rx_buf[8] = {0};
+  twai_frame_t rx_frame = {
+      .buffer = rx_buf,
+      .buffer_len = sizeof(rx_buf),
+  };
+  if (twai_node_receive_from_isr(handle, &rx_frame) != ESP_OK) {
+    // TODO some mechanism of reporting errors/dropped frames
+    return false;
   }
+
+  if (rx_frame.header.id != 0x7E8 && rx_frame.header.id != 0x7B8) {
+    // not an id we care about
+    return false;
+  }
+
+  can_rx_frame_t out = {
+      .id = rx_frame.header.id,
+      .ide = rx_frame.header.ide,
+      .data_len = rx_frame.header.dlc,
+  };
+  memcpy(out.data, rx_buf, out.data_len);
+  xQueueSendFromISR(rx_queue, &out, &high_task_woken);
 
   return (high_task_woken == pdTRUE);
 }
