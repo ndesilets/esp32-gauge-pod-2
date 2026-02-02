@@ -63,11 +63,23 @@ static QueueHandle_t ecu_can_frames = NULL;         // can frames from 0x7E8
 static QueueHandle_t abs_can_frames = NULL;         // can frames from 0x7B8
 static QueueHandle_t assembled_isotp_queue = NULL;  // assembled isotp messages
 
-void debug_log_frame(const uint8_t* buffer, size_t length) {
-  for (size_t i = 0; i < length; i++) {
-    printf("%02X ", buffer[i]);
+void debug_log_frame(bool isRx, const uint8_t* buffer, size_t length) {
+  static const char hex_chars[] = "0123456789ABCDEF";
+  const size_t max_len = (length > 64) ? 64 : length;
+  char hex_out[3 * 64 + 1];
+  size_t out_idx = 0;
+
+  for (size_t i = 0; i < max_len; i++) {
+    uint8_t byte = buffer[i];
+    hex_out[out_idx++] = hex_chars[byte >> 4];
+    hex_out[out_idx++] = hex_chars[byte & 0x0F];
+    if (i + 1 < max_len) {
+      hex_out[out_idx++] = ' ';
+    }
   }
-  printf("\n");
+  hex_out[out_idx] = '\0';
+
+  ESP_LOGI(TAG, "%s %s", isRx ? "[RX]" : "[TX]", hex_out);
 }
 
 // --- cbor encoder
@@ -424,6 +436,17 @@ void send_abs_data_request(twai_node_handle_t node_hdl) {
   ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
 }
 
+void transmit_frame(twai_node_handle_t node_hdl, uint16_t dest, uint8_t* buffer, size_t payload_len) {
+  twai_frame_t frame = {
+      .header.id = dest,
+      .header.ide = false,
+      .buffer = buffer,
+      .buffer_len = payload_len,
+  };
+  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &frame, pdMS_TO_TICKS(100)));
+  debug_log_frame(false, frame.buffer, frame.buffer_len);
+}
+
 // sends requests for car data, parses responses, and updates state
 void car_data_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
@@ -436,9 +459,9 @@ void car_data_task(void* arg) {
 
     // drain any stale ECU frames before starting a new request
     can_rx_frame_t stale;
-    while (xQueueReceive(ecu_can_frames, &stale, 0) == pdTRUE) {
+    while (xQueueReceive(ecu_can_frames, &stale, pdMS_TO_TICKS(5)) == pdTRUE) {
       ESP_LOGI(TAG, "Drained stale ECU frame ID 0x%0X", stale.id);
-      debug_log_frame(stale.data, stale.data_len);
+      debug_log_frame(true, stale.data, stale.data_len);
     }
 
     // --- ECU DATA
@@ -473,6 +496,10 @@ void car_data_task(void* arg) {
     }
 
     ESP_LOGI(TAG, "ECU data request will use %zu ISO-TP frames", isotp_payload_frame_count);
+    for (int i = 0; i < isotp_payload_frame_count; i++) {
+      debug_log_frame(false, can_frames[i], 8);
+    }
+    ESP_LOGI(TAG, "^ Built ISO-TP frames for ECU data request");
 
     // 2. send first frame of ecu data request
 
@@ -480,10 +507,11 @@ void car_data_task(void* arg) {
         .header.id = ECU_REQ_ID,
         .header.ide = false,
         .buffer = can_frames[0],
-        .buffer_len = (isotp_payload_frame_count > 1) ? 8 : (payload_len + 1),
+        // .buffer_len = (isotp_payload_frame_count > 1) ? 8 : (payload_len + 1),
+        .buffer_len = 8,  // it's always going to be 8 here
     };
     ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(100)));
-    debug_log_frame(msg.buffer, msg.buffer_len);
+    debug_log_frame(false, msg.buffer, msg.buffer_len);
 
     ESP_LOGI(TAG, "Sent first message");
 
@@ -492,12 +520,13 @@ void car_data_task(void* arg) {
     if (isotp_payload_frame_count > 1) {
       can_rx_frame_t frame = {0};
       bool got_fc = false;
-      const TickType_t fc_timeout = pdMS_TO_TICKS(200);
       while (!got_fc) {
-        if (xQueueReceive(ecu_can_frames, &frame, fc_timeout) != pdTRUE) {
+        if (xQueueReceive(ecu_can_frames, &frame, pdMS_TO_TICKS(1000)) != pdTRUE) {
           ESP_LOGW(TAG, "Didn't receive FC frame from ECU");
           break;
         }
+
+        debug_log_frame(true, frame.data, frame.data_len);
 
         if ((frame.data[0] & 0xF0) != ISOTP_FLOW_CONTROL_FRAME) {
           ESP_LOGW(TAG, "Unexpected frame from ECU while waiting for FC: 0x%02X", frame.data[0]);
@@ -509,7 +538,7 @@ void car_data_task(void* arg) {
           continue;
         }
 
-        debug_log_frame(frame.data, frame.data_len);
+        // debug_log_frame(true, frame.data, frame.data_len);
         ESP_LOGI(TAG, "Got correct FC for request");
         got_fc = true;
       }
@@ -519,7 +548,7 @@ void car_data_task(void* arg) {
       }
     }
 
-    // 4. send remaining frames of ecu data request (based on FC info)
+    // 4. send remaining frames of ecu data request (assuming full speed from FC frame)
 
     if (isotp_payload_frame_count > 1) {
       for (uint8_t i = 1; i < isotp_payload_frame_count; i++) {
@@ -530,7 +559,7 @@ void car_data_task(void* arg) {
             .buffer_len = 8,
         };
         ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &cf_msg, pdMS_TO_TICKS(100)));
-        debug_log_frame(cf_msg.buffer, cf_msg.buffer_len);
+        debug_log_frame(false, cf_msg.buffer, cf_msg.buffer_len);
       }
     }
 
@@ -539,15 +568,14 @@ void car_data_task(void* arg) {
     // 5. wait and gather response frames
 
     can_rx_frame_t frame = {0};
-    const TickType_t rx_timeout = pdMS_TO_TICKS(200);
     while (1) {
-      if (xQueueReceive(ecu_can_frames, &frame, rx_timeout) != pdTRUE) {
-        ESP_LOGW(TAG, "Didn't receive response from ECU");
+      if (xQueueReceive(ecu_can_frames, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+        ESP_LOGE(TAG, "Didn't receive response from ECU");
         break;
       }
       if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-        ESP_LOGI(TAG, "Skipping FC frame while waiting for ECU response");
-        debug_log_frame(frame.data, frame.data_len);
+        ESP_LOGW(TAG, "Skipping FC frame while waiting for ECU response");
+        debug_log_frame(true, frame.data, frame.data_len);
         continue;
       }
       break;
@@ -558,7 +586,7 @@ void car_data_task(void* arg) {
     }
 
     ESP_LOGI(TAG, "Received initial data from ECU");
-    debug_log_frame(frame.data, frame.data_len);
+    debug_log_frame(true, frame.data, frame.data_len);
 
     // send FC frame if needed
 
@@ -576,13 +604,16 @@ void car_data_task(void* arg) {
 
     if ((frame.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
       ESP_LOGI(TAG, "Got single frame");
-      debug_log_frame(frame.data, frame.data_len);
+      debug_log_frame(true, frame.data, frame.data_len);
 
       assembled.len = frame.data[0] & 0x0F;
       memcpy(assembled.data, &frame.data[1], assembled.len);
+    } else if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      ESP_LOGW(TAG, "Unexpected FC frame when assembling ECU response");
+      continue;
     } else {
-      ESP_LOGI(TAG, "Got a multi-frame");
-      debug_log_frame(frame.data, frame.data_len);
+      ESP_LOGI(TAG, "Got a CF frame");
+      debug_log_frame(true, frame.data, frame.data_len);
 
       assembled.len = ((frame.data[0] & 0x0F) << 8) | frame.data[1];
 
@@ -590,31 +621,32 @@ void car_data_task(void* arg) {
       uint8_t frame_idx = 0;
       frames[frame_idx++] = frame;
 
-      const size_t total_payload_len = assembled.len;
-      const size_t remaining = (total_payload_len > 6) ? (total_payload_len - 6) : 0;
-      const size_t expected_cfs = (remaining + 6) / 7;
-      const size_t expected_frames = 1 + expected_cfs;
-      const size_t max_frames = sizeof(frames) / sizeof(frames[0]);
+      uint8_t remaining = (assembled.len > 6) ? (assembled.len - 6) : 0;
+      uint8_t expected_cfs = (remaining + 6) / 7;
+      uint8_t expected_frames = 1 + expected_cfs;
+      uint8_t max_frames = 16;
       while (frame_idx < expected_frames && frame_idx < max_frames) {
-        if (xQueueReceive(ecu_can_frames, &frame, rx_timeout) != pdTRUE) {
-          ESP_LOGW(TAG, "Timeout waiting for ECU response frames (%u/%u)", (unsigned)frame_idx,
+        if (xQueueReceive(ecu_can_frames, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+          ESP_LOGE(TAG, "Timeout waiting for ECU response frames (%u/%u)", (unsigned)frame_idx,
                    (unsigned)expected_frames);
           break;
         }
         if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-          ESP_LOGI(TAG, "Skipping FC frame during ECU response collection");
+          ESP_LOGW(TAG, "Skipping FC frame during ECU response collection");
           continue;
         }
         frames[frame_idx++] = frame;
       }
 
       if (!isotp_unwrap_frames(frames, frame_idx, assembled.data, sizeof(assembled.data), &assembled.len)) {
-        ESP_LOGW(TAG, "Failed to unwrap ISO-TP frames from ECU");
+        ESP_LOGE(TAG, "Failed to unwrap ISO-TP frames from ECU");
         continue;
       }
     }
 
-    // TODO parse msg.data
+    ESP_LOGI(TAG, "Assembled complete ECU response of %zu bytes:", assembled.len);
+
+        // TODO parse msg.data
     // TODO update state with ecu data
 
     // --- ABS DATA
@@ -652,14 +684,14 @@ void can_rx_dispatcher_task(void* arg) {
       continue;
     }
 
-    ESP_LOGI(TAG, "Dispatching CAN frame ID 0x%03X", frame.id);
-    debug_log_frame(frame.data, frame.data_len);
+    // ESP_LOGI(TAG, "Dispatching CAN frame ID 0x%03X", frame.id);
+    // debug_log_frame(true, frame.data, frame.data_len);
     dispatch_can_frame(&frame);
 
     // drain any backlog without blocking
-    while (xQueueReceive(can_rx_queue, &frame, 0) == pdTRUE) {
-      ESP_LOGI(TAG, "Dispatching CAN frame ID 0x%03X", frame.id);
-      debug_log_frame(frame.data, frame.data_len);
+    while (xQueueReceive(can_rx_queue, &frame, pdMS_TO_TICKS(10)) == pdTRUE) {
+      // ESP_LOGI(TAG, "Dispatching CAN frame ID 0x%03X", frame.id);
+      // debug_log_frame(true, frame.data, frame.data_len);
       dispatch_can_frame(&frame);
     }
   }
@@ -696,6 +728,32 @@ void uart_emitter_task(void* arg) {
   }
 }
 
+void twai_error_monitor_task(void* arg) {
+  twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
+  twai_node_status_t last_status = {0};
+  twai_node_record_t last_record = {0};
+  bool has_last = false;
+
+  while (1) {
+    twai_node_status_t status = {0};
+    twai_node_record_t record = {0};
+    if (twai_node_get_info(node_hdl, &status, &record) == ESP_OK) {
+      if (!has_last || status.state != last_status.state || status.tx_error_count != last_status.tx_error_count ||
+          status.rx_error_count != last_status.rx_error_count || record.bus_err_num != last_record.bus_err_num) {
+        ESP_LOGW(TAG, "TWAI status state=%d tx_err=%u rx_err=%u bus_err=%" PRIu32, status.state, status.tx_error_count,
+                 status.rx_error_count, record.bus_err_num);
+        last_status = status;
+        last_record = record;
+        has_last = true;
+      }
+    } else {
+      ESP_LOGW(TAG, "TWAI status read failed");
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+}
+
 // --- TODO bluetooth stuff
 
 // --- main
@@ -709,7 +767,11 @@ void app_main(void) {
       .io_cfg.tx = 5,
       .io_cfg.rx = 4,
       .bit_timing.bitrate = 500000,
-      .tx_queue_depth = 8,  // 8 should be plenty for ecu responses (largest one)
+      .tx_queue_depth = 1,  // 8 should be plenty for ecu responses (largest one)
+
+      // TODO test
+      // .fail_retry_cnt = 0,
+      // .flags.enable_self_test = true,
   };
   twai_node_handle_t node_hdl = NULL;
   ESP_ERROR_CHECK(twai_new_node_onchip(&node_config, &node_hdl));
@@ -758,9 +820,10 @@ void app_main(void) {
 
   // --- tasks
 
-  xTaskCreate(car_data_task, "car_data_task", 8192, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
-  xTaskCreate(can_rx_dispatcher_task, "can_rx_dispatcher_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(car_data_task, "car_data_task", 8192 * 2, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(can_rx_dispatcher_task, "can_rx_dispatcher_task", 8192, NULL, tskIDLE_PRIORITY + 2, NULL);
   xTaskCreate(analog_data_task, "analog_data_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(twai_error_monitor_task, "twai_error_monitor_task", 4096, (void*)node_hdl, tskIDLE_PRIORITY + 1, NULL);
 #ifdef CONFIG_DH_UART_ENABLED
   xTaskCreate(uart_emitter_task, "uart_emitter_task", 8192, NULL, tskIDLE_PRIORITY + 1, NULL);
 #endif
