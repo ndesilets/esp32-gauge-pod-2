@@ -280,6 +280,21 @@ first byte is service ID
   // TODO ethanol concentration
 */
 
+/*
+  0x22, 0x00,        // read memory by addr list, padding mode 0
+  0x00, 0x00, 0x08,  // coolant
+  0x00, 0x00, 0x09,  // af correction #1
+  0x00, 0x00, 0x0A,  // af learning #1
+  0x00, 0x00, 0x0E,  // engine rpm
+  0x00, 0x00, 0x12,  // intake air temperature
+  // TODO injector duty cycle
+  0x00, 0x00, 0x46,  // afr
+  0xFF, 0x6B, 0x49,  // DAM
+  0xFF, 0x88, 0x10,  // knock correction
+  // TODO ethanol concentration
+*/
+
+
 // TODO figure out better way of having telemetry_type_t and this since they're largely the same
 typedef struct {
   // primary
@@ -534,14 +549,20 @@ void car_data_task(void* arg) {
 
     ESP_LOGI(TAG, "--- [START] --- Requesting car data...");
 
-    // drain any stale ECU frames before starting a new request
+    // drain any frames before starting a new request (shouldn't happen)
     can_rx_frame_t stale;
-    while (xQueueReceive(ecu_can_frames, &stale, pdMS_TO_TICKS(5)) == pdTRUE) {
-      ESP_LOGI(TAG, "Drained stale ECU frame ID 0x%0X", stale.id);
+    while (xQueueReceive(ecu_can_frames, &stale, pdMS_TO_TICKS(0)) == pdTRUE) {
+      ESP_LOGW(TAG, "Drained stale ECU frame ID 0x%0X", stale.id);
+      debug_log_frame(true, stale.data, stale.data_len);
+    }
+    while (xQueueReceive(abs_can_frames, &stale, pdMS_TO_TICKS(0)) == pdTRUE) {
+      ESP_LOGW(TAG, "Drained stale ABS frame ID 0x%0X", stale.id);
       debug_log_frame(true, stale.data, stale.data_len);
     }
 
+    // ########################################################################
     // --- ECU DATA
+    // ########################################################################
 
     // 1. generate ecu data request
 
@@ -644,30 +665,30 @@ void car_data_task(void* arg) {
 
     // 5. wait and gather response frames
 
-    can_rx_frame_t frame = {0};
+    can_rx_frame_t ecu_frame = {0};
     while (1) {
-      if (xQueueReceive(ecu_can_frames, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+      if (xQueueReceive(ecu_can_frames, &ecu_frame, pdMS_TO_TICKS(200)) != pdTRUE) {
         ESP_LOGE(TAG, "Didn't receive response from ECU");
         break;
       }
-      if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      if ((ecu_frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
         ESP_LOGW(TAG, "Skipping FC frame while waiting for ECU response");
-        debug_log_frame(true, frame.data, frame.data_len);
+        debug_log_frame(true, ecu_frame.data, ecu_frame.data_len);
         continue;
       }
       break;
     }
 
-    if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+    if ((ecu_frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
       continue;
     }
 
     ESP_LOGI(TAG, "Received initial data from ECU");
-    debug_log_frame(true, frame.data, frame.data_len);
+    debug_log_frame(true, ecu_frame.data, ecu_frame.data_len);
 
     // send FC frame if needed
 
-    if ((frame.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
+    if ((ecu_frame.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
       send_isotp_flow_control(node_hdl, ECU_REQ_ID);
 
       ESP_LOGI(TAG, "Sent FC to ECU");
@@ -675,80 +696,135 @@ void car_data_task(void* arg) {
 
     // 7. assemble response frames into complete message
 
-    assembled_isotp_t assembled = {
+    assembled_isotp_t ecu_assembled = {
         .source_id = ECU_RES_ID,
     };
 
-    if ((frame.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
+    if ((ecu_frame.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
       ESP_LOGI(TAG, "Got single frame");
-      debug_log_frame(true, frame.data, frame.data_len);
+      debug_log_frame(true, ecu_frame.data, ecu_frame.data_len);
 
-      assembled.len = frame.data[0] & 0x0F;
-      memcpy(assembled.data, &frame.data[1], assembled.len);
-    } else if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      ecu_assembled.len = ecu_frame.data[0] & 0x0F;
+      memcpy(ecu_assembled.data, &ecu_frame.data[1], ecu_assembled.len);
+    } else if ((ecu_frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
       ESP_LOGW(TAG, "Unexpected FC frame when assembling ECU response");
       continue;
     } else {
       ESP_LOGI(TAG, "Got a CF frame");
-      debug_log_frame(true, frame.data, frame.data_len);
+      debug_log_frame(true, ecu_frame.data, ecu_frame.data_len);
 
-      assembled.len = ((frame.data[0] & 0x0F) << 8) | frame.data[1];
+      ecu_assembled.len = ((ecu_frame.data[0] & 0x0F) << 8) | ecu_frame.data[1];
 
-      can_rx_frame_t frames[16] = {0};
+      can_rx_frame_t ecu_frames[16] = {0};
       uint8_t frame_idx = 0;
-      frames[frame_idx++] = frame;
-
-      uint8_t remaining = (assembled.len > 6) ? (assembled.len - 6) : 0;
+      ecu_frames[frame_idx++] = ecu_frame;
+      uint8_t remaining = (ecu_assembled.len > 6) ? (ecu_assembled.len - 6) : 0;
       uint8_t expected_cfs = (remaining + 6) / 7;
       uint8_t expected_frames = 1 + expected_cfs;
       uint8_t max_frames = 16;
       while (frame_idx < expected_frames && frame_idx < max_frames) {
-        if (xQueueReceive(ecu_can_frames, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+        if (xQueueReceive(ecu_can_frames, &ecu_frame, pdMS_TO_TICKS(200)) != pdTRUE) {
           ESP_LOGE(TAG, "Timeout waiting for ECU response frames (%u/%u)", (unsigned)frame_idx,
                    (unsigned)expected_frames);
           break;
         }
-        if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+        if ((ecu_frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
           ESP_LOGW(TAG, "Skipping FC frame during ECU response collection");
           continue;
         }
-        frames[frame_idx++] = frame;
+        ecu_frames[frame_idx++] = ecu_frame;
       }
 
-      if (!isotp_unwrap_frames(frames, frame_idx, assembled.data, sizeof(assembled.data), &assembled.len)) {
+      if (!isotp_unwrap_frames(ecu_frames, frame_idx, ecu_assembled.data, sizeof(ecu_assembled.data), &ecu_assembled.len)) {
         ESP_LOGE(TAG, "Failed to unwrap ISO-TP frames from ECU");
         continue;
       }
     }
 
-    ESP_LOGI(TAG, "Assembled complete ECU response of %zu bytes:", assembled.len);
+    ESP_LOGI(TAG, "Assembled complete ECU response of %zu bytes:", ecu_assembled.len);
 
     // 8. parse msg.data
 
-    ssm_ecu_response_t response;
-    ssm_parse_message(assembled.data, assembled.len, &response);
+    ssm_ecu_response_t ecu_response;
+    ssm_parse_message(ecu_assembled.data, ecu_assembled.len, &ecu_response);
 
     if (xSemaphoreTake(current_state_mutex, 0) == pdTRUE) {
-      current_state.water_temp = response.water_temp;
-      current_state.af_correct = response.af_correct;
-      current_state.af_learned = response.af_learned;
-      current_state.engine_rpm = response.engine_rpm;
-      current_state.int_temp = response.int_temp;
-      current_state.af_ratio = response.af_ratio;
-      current_state.dam = response.dam;
-      current_state.fb_knock = response.fb_knock;
+      current_state.water_temp = ecu_response.water_temp;
+      current_state.af_correct = ecu_response.af_correct;
+      current_state.af_learned = ecu_response.af_learned;
+      current_state.engine_rpm = ecu_response.engine_rpm;
+      current_state.int_temp = ecu_response.int_temp;
+      current_state.af_ratio = ecu_response.af_ratio;
+      current_state.dam = ecu_response.dam;
+      current_state.fb_knock = ecu_response.fb_knock;
       xSemaphoreGive(current_state_mutex);
     }
 
+    // ########################################################################
     // --- ABS DATA
+    // ########################################################################
 
-    // send_abs_data_request(node_hdl);
-    // if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
-    //   continue;
-    // }
+    // uds payload with no iso-tp framing etc.
+    // clang-format off
+    uint8_t uds_req_payload[] = {
+        0x22,  // read memory by addr list
+        0x10, 0x10, // brake pressure
+        0x10, 0x29, // steering angle
+    };
+    // clang-format on
+    const int uds_payload_len = sizeof(uds_req_payload);
 
-    // TODO parse msg.data
-    // TODO update state with abs data
+    // abs requests are small enough to fit in single frame iso-tp
+    uint8_t abs_frame[1][8] = {0};
+    if (!isotp_wrap_payload(uds_req_payload, uds_payload_len, abs_frame, 1, NULL)) {
+      ESP_LOGE(TAG, "Failed to build ISO-TP frames for ECU data request");
+      continue;
+    }
+
+    // send message
+    twai_frame_t abs_msg = {
+        .header.id = ABS_REQ_ID,
+        .header.ide = false,
+        .buffer = abs_frame[0],
+        .buffer_len = uds_payload_len,
+    };
+    ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &abs_msg, pdMS_TO_TICKS(100)));
+    debug_log_frame(false, abs_msg.buffer, abs_msg.buffer_len);
+
+    // parse response
+    assembled_isotp_t abs_assembled = {
+        .source_id = ABS_RES_ID,
+    };
+    can_rx_frame_t abs_res_frame = {0};
+    if (xQueueReceive(abs_can_frames, &abs_res_frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+      ESP_LOGE(TAG, "Didn't receive response from ABS ECU");
+      continue;
+    }
+    debug_log_frame(false, abs_res_frame.data, abs_res_frame.data_len);
+
+    if ((abs_res_frame.data[0] & 0xF0) != ISOTP_SINGLE_FRAME) {
+      ESP_LOGE(TAG, "Unexpected non-single-frame response from ABS ECU");
+      continue;
+    }
+
+    if (abs_res_frame.data[1] != 0x62) {
+      ESP_LOGE(TAG, "Unexpected UDS response from ABS ECU: 0x%02X", abs_res_frame.data[1]);
+      continue;
+    }
+
+    abs_assembled.len = abs_res_frame.data[0] & 0x0F;
+    memcpy(abs_assembled.data, &abs_res_frame.data[1], abs_assembled.len);
+
+    // first 2 bytes are brake pressure then steering angle
+    float brake_pressure = (uint16_t)(abs_assembled.data[2] << 8 | abs_assembled.data[3]); // in bar
+    float steering_angle = -(float)((abs_assembled.data[4] << 8) | abs_assembled.data[5]); // in degrees
+
+    // update state
+    if (xSemaphoreTake(current_state_mutex, 0) == pdTRUE) {
+      // TODO need to figure out where this belongs for bluetooth telemetry
+      ESP_LOGI(TAG, "brake pressure: %f - steering rangle: %f", brake_pressure, steering_angle);
+      xSemaphoreGive(current_state_mutex);
+    }
   }
 }
 
