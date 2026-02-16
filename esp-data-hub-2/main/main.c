@@ -572,11 +572,11 @@ void car_data_task(void* arg) {
       continue;
     }
 
-    ESP_LOGI(TAG, "ECU data request will use %zu ISO-TP frames", isotp_payload_frame_count);
-    for (int i = 0; i < isotp_payload_frame_count; i++) {
-      debug_log_frame(false, can_frames[i], 8);
-    }
-    ESP_LOGI(TAG, "^ Built ISO-TP frames for ECU data request");
+    // ESP_LOGI(TAG, "ECU data request will use %zu ISO-TP frames", isotp_payload_frame_count);
+    // for (int i = 0; i < isotp_payload_frame_count; i++) {
+    //   debug_log_frame(false, can_frames[i], 8);
+    // }
+    // ESP_LOGI(TAG, "^ Built ISO-TP frames for ECU data request");
 
     // 2. send first frame of ecu data request
 
@@ -689,9 +689,6 @@ void car_data_task(void* arg) {
       ESP_LOGW(TAG, "Unexpected FC frame when assembling ECU response");
       continue;
     } else {
-      ESP_LOGI(TAG, "Got a CF frame");
-      debug_log_frame(true, frame.data, frame.data_len);
-
       assembled.len = ((frame.data[0] & 0x0F) << 8) | frame.data[1];
 
       can_rx_frame_t frames[16] = {0};
@@ -712,6 +709,10 @@ void car_data_task(void* arg) {
           ESP_LOGW(TAG, "Skipping FC frame during ECU response collection");
           continue;
         }
+
+        ESP_LOGI(TAG, "Got a CF frame");
+        debug_log_frame(true, frame.data, frame.data_len);
+
         frames[frame_idx++] = frame;
       }
 
@@ -737,7 +738,18 @@ void car_data_task(void* arg) {
       current_state.af_ratio = response.af_ratio;
       current_state.dam = response.dam;
       current_state.fb_knock = response.fb_knock;
+
+      // TODO log all fields in current_state
+
       xSemaphoreGive(current_state_mutex);
+      ESP_LOGI(TAG,
+               "state seq=%" PRIu32 " ts=%" PRIu32
+               " water=%.2f oil=%.2f oil_p=%.2f dam=%.3f af_learned=%.2f "
+               "af_ratio=%.2f int=%.2f fb_knock=%.2f af_correct=%.2f inj_duty=%.2f eth=%.2f rpm=%.1f",
+               current_state.sequence, current_state.timestamp_ms, current_state.water_temp, current_state.oil_temp,
+               current_state.oil_pressure, current_state.dam, current_state.af_learned, current_state.af_ratio,
+               current_state.int_temp, current_state.fb_knock, current_state.af_correct, current_state.inj_duty,
+               current_state.eth_conc, current_state.engine_rpm);
     }
 
     // --- ABS DATA
