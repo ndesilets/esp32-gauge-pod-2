@@ -867,8 +867,8 @@ void app_main(void) {
   // --- twai/can config
 
   twai_onchip_node_config_t node_config = {
-      .io_cfg.tx = 5,
-      .io_cfg.rx = 4,
+      .io_cfg.tx = 6,
+      .io_cfg.rx = 7,
       .bit_timing.bitrate = 500000,
       .tx_queue_depth = 1,  // 8 should be plenty for ecu responses (largest one)
 
