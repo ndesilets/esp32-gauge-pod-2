@@ -24,6 +24,7 @@ static i2c_master_dev_handle_t s_ads1115 = NULL;
 #define ADS1115_REG_CONFIG 0x01
 
 #define ADS1115_OS_SINGLE (1u << 15)
+#define ADS1115_OS_NOT_BUSY (1u << 15)
 #define ADS1115_MUX_AIN0_GND (0x4u << 12)
 #define ADS1115_MUX_AIN1_GND (0x5u << 12)
 #define ADS1115_MUX_AIN2_GND (0x6u << 12)
@@ -32,6 +33,29 @@ static i2c_master_dev_handle_t s_ads1115 = NULL;
 #define ADS1115_MODE_SINGLE (1u << 8)
 #define ADS1115_DR_128SPS (0x4u << 5)
 #define ADS1115_COMP_DISABLE (0x3u)
+
+static uint32_t ads1115_conversion_timeout_ms(uint16_t dr_bits) {
+  switch (dr_bits) {
+    case (0x0u << 5):  // 8 SPS
+      return 130;
+    case (0x1u << 5):  // 16 SPS
+      return 70;
+    case (0x2u << 5):  // 32 SPS
+      return 40;
+    case (0x3u << 5):  // 64 SPS
+      return 25;
+    case (0x4u << 5):  // 128 SPS
+      return 15;
+    case (0x5u << 5):  // 250 SPS
+      return 10;
+    case (0x6u << 5):  // 475 SPS
+      return 8;
+    case (0x7u << 5):  // 860 SPS
+      return 6;
+    default:
+      return 15;
+  }
+}
 
 static esp_err_t ads1115_write_reg(uint8_t reg, uint16_t value) {
   uint8_t payload[3] = {
@@ -63,7 +87,8 @@ static esp_err_t ads1115_read_single_ended_raw(uint16_t mux_bits, int16_t* out_r
     return ESP_ERR_INVALID_ARG;
   }
 
-  const uint16_t cfg = ADS1115_OS_SINGLE | mux_bits | ADS1115_PGA_6_144V | ADS1115_MODE_SINGLE | ADS1115_DR_128SPS |
+  const uint16_t dr_bits = ADS1115_DR_128SPS;
+  const uint16_t cfg = ADS1115_OS_SINGLE | mux_bits | ADS1115_PGA_6_144V | ADS1115_MODE_SINGLE | dr_bits |
                        ADS1115_COMP_DISABLE;
 
   esp_err_t err = ads1115_write_reg(ADS1115_REG_CONFIG, cfg);
@@ -71,8 +96,23 @@ static esp_err_t ads1115_read_single_ended_raw(uint16_t mux_bits, int16_t* out_r
     return err;
   }
 
-  // At 128 SPS, conversion time is ~7.8ms. Give margin before reading conversion register.
-  vTaskDelay(pdMS_TO_TICKS(10));
+  uint16_t config_readback = 0;
+  const uint32_t timeout_ms = ads1115_conversion_timeout_ms(dr_bits);
+  uint32_t waited_ms = 0;
+  while (waited_ms < timeout_ms) {
+    err = ads1115_read_reg(ADS1115_REG_CONFIG, &config_readback);
+    if (err != ESP_OK) {
+      return err;
+    }
+    if ((config_readback & ADS1115_OS_NOT_BUSY) != 0) {
+      break;
+    }
+    vTaskDelay(pdMS_TO_TICKS(1));
+    waited_ms++;
+  }
+  if ((config_readback & ADS1115_OS_NOT_BUSY) == 0) {
+    return ESP_ERR_TIMEOUT;
+  }
 
   uint16_t conv = 0;
   err = ads1115_read_reg(ADS1115_REG_CONVERSION, &conv);
@@ -159,8 +199,8 @@ static esp_err_t real_read(analog_sensor_reading_t* out) {
   ESP_RETURN_ON_ERROR(ads1115_read_single_ended_raw(ADS1115_MUX_AIN0_GND, &raw_temp), TAG, "temp read failed");
   ESP_RETURN_ON_ERROR(ads1115_read_single_ended_raw(ADS1115_MUX_AIN1_GND, &raw_pressure), TAG, "pressure read failed");
 
-  const float temp_voltage = ((float)raw_temp) * (k_v_fsr / 32767.0f);
-  const float pressure_voltage = ((float)raw_pressure) * (k_v_fsr / 32767.0f);
+  const float temp_voltage = ((float)raw_temp) * (k_v_fsr / 32768.0f);
+  const float pressure_voltage = ((float)raw_pressure) * (k_v_fsr / 32768.0f);
 
   const float resistance = analog_calculate_resistance_ohms(temp_voltage, k_v_sup, k_bias_ohms);
   const float unsmoothed_temp_f = analog_interpolate_temperature_f(resistance);
