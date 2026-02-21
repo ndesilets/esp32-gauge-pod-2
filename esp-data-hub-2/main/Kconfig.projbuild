@@ -19,4 +19,52 @@ config DH_UART_BUFFER_SIZE
     help
         Size in bytes for the UART RX/TX buffers used by the telemetry connection.
 
+config DH_ANALOG_USE_MOCK
+    bool "Use mock analog oil sensors"
+    default n
+    help
+        Use generated mock values instead of reading real ADS1115 hardware.
+
+config DH_ANALOG_I2C_PORT
+    int "Analog I2C port"
+    range 0 1
+    default 0
+    help
+        I2C controller port used for ADS1115 analog sensors.
+
+config DH_ANALOG_I2C_SDA_GPIO
+    int "Analog I2C SDA GPIO"
+    range 0 48
+    default 5
+    help
+        SDA GPIO pin for ADS1115.
+
+config DH_ANALOG_I2C_SCL_GPIO
+    int "Analog I2C SCL GPIO"
+    range 0 48
+    default 4
+    help
+        SCL GPIO pin for ADS1115.
+
+config DH_ANALOG_I2C_FREQ_HZ
+    int "Analog I2C frequency (Hz)"
+    range 10000 1000000
+    default 100000
+    help
+        I2C bus frequency used for ADS1115 transactions.
+
+config DH_ANALOG_ADS1115_ADDR
+    hex "ADS1115 I2C address"
+    range 0x01 0x7F
+    default 0x48
+    help
+        I2C address of ADS1115.
+
+config DH_ANALOG_LOG_PERIOD_MS
+    int "Analog log period (ms)"
+    range 100 10000
+    default 500
+    help
+        Minimum period between analog sensor info logs.
+
 endmenu
