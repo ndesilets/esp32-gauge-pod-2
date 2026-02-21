@@ -9,11 +9,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "analog_sensors.h"
 #include "cbor.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
-#include "esp_log.h"
 #include "esp_err.h"
+#include "esp_log.h"
 #include "esp_system.h"
 #include "esp_twai.h"
 #include "esp_twai_onchip.h"
@@ -22,10 +23,10 @@
 #include "freertos/task.h"
 #include "math.h"
 #include "sdkconfig.h"
-#include "analog_sensors.h"
 #include "telemetry_types.h"
 
 static const char* TAG = "data_hub";
+#define DH_UART_PORT ((uart_port_t)CONFIG_DH_UART_PORT)
 
 telemetry_packet_t current_state = {};
 SemaphoreHandle_t current_state_mutex;
@@ -179,7 +180,7 @@ void send_mock_data(void* arg) {
     encode_telemetry_packet(&packet, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
     cbor_buffer[encoded_size] = '\0';
 
-    uart_write_bytes(UART_NUM_1, cbor_buffer, encoded_size);
+    uart_write_bytes(DH_UART_PORT, cbor_buffer, encoded_size);
     for (size_t i = 0; i < encoded_size; i++) {
       printf("%02X ", cbor_buffer[i]);
     }
@@ -267,7 +268,7 @@ void analog_data_task(void* arg) {
       ESP_LOGI(TAG, "analog oil_temp=%.1fF oil_pressure=%.1fpsi", reading.oil_temp_f, reading.oil_pressure_psi);
     }
 
-    vTaskDelay(pdMS_TO_TICKS(20));  // ~50hz
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_DH_ANALOG_POLL_PERIOD_MS));
   }
 }
 
@@ -366,6 +367,22 @@ static inline float ssm_ecu_parse_feedback_knock(uint32_t value) {
   memcpy(&out, &value, sizeof(out));
   return out;
 }
+
+/*
+    uint8_t ssm_req_payload[] = {
+        0xA8, 0x00,        // read memory by addr list, padding mode 0
+        0x00, 0x00, 0x08,  // coolant
+        0x00, 0x00, 0x09,  // af correction #1
+        0x00, 0x00, 0x0A,  // af learning #1
+        0x00, 0x00, 0x0E,  // engine rpm
+        0x00, 0x00, 0x12,  // intake air temperature
+        // TODO injector duty cycle
+        0x00, 0x00, 0x46,  // afr
+        0xFF, 0x6B, 0x49,  // DAM
+        0xFF, 0x88, 0x10,  // knock correction
+        // TODO ethanol concentration
+    };
+*/
 
 void ssm_parse_message(uint8_t ssm_payload[], uint8_t length, ssm_ecu_response_t* response) {
   // ssm_payload structure doesn't change
@@ -567,10 +584,11 @@ void transmit_frame(twai_node_handle_t node_hdl, uint16_t dest, uint8_t* buffer,
 // sends requests for car data, parses responses, and updates state
 void car_data_task(void* arg) {
   twai_node_handle_t node_hdl = (twai_node_handle_t)arg;
+  const TickType_t poll_period_ticks =
+      pdMS_TO_TICKS(CONFIG_DH_CAR_POLL_PERIOD_MS > 0 ? CONFIG_DH_CAR_POLL_PERIOD_MS : 1);
 
   while (1) {
-    // vTaskDelay(pdMS_TO_TICKS(63));    // start with ~16hz, similar to accessport
-    vTaskDelay(pdMS_TO_TICKS(5000));  // start with ~16hz, similar to accessport
+    vTaskDelay(poll_period_ticks);
 
     ESP_LOGI(TAG, "--- [START] --- Requesting car data...");
 
@@ -843,7 +861,7 @@ void can_rx_dispatcher_task(void* arg) {
 // --- uart stuff
 
 void uart_emitter_task(void* arg) {
-  const TickType_t period_ticks = pdMS_TO_TICKS(33);  // ~30hz
+  const TickType_t period_ticks = pdMS_TO_TICKS(CONFIG_DH_UART_EMIT_PERIOD_MS);
   TickType_t last_wake = xTaskGetTickCount();
 
   // main loop
@@ -867,7 +885,7 @@ void uart_emitter_task(void* arg) {
     encode_telemetry_packet(&state_copy, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
     cbor_buffer[encoded_size] = '\0';
 
-    uart_write_bytes(UART_NUM_1, cbor_buffer, encoded_size);
+    uart_write_bytes(DH_UART_PORT, cbor_buffer, encoded_size);
   }
 }
 
@@ -907,8 +925,8 @@ void app_main(void) {
   // --- twai/can config
 
   twai_onchip_node_config_t node_config = {
-      .io_cfg.tx = 6,
-      .io_cfg.rx = 7,
+      .io_cfg.tx = CONFIG_DH_TWAI_TX_GPIO,
+      .io_cfg.rx = CONFIG_DH_TWAI_RX_GPIO,
       .bit_timing.bitrate = 500000,
       .tx_queue_depth = 1,  // 8 should be plenty for ecu responses (largest one)
 
@@ -950,10 +968,11 @@ void app_main(void) {
   };
   int intr_alloc_flags = 0;
 
-  ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
-  ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, 17, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+  ESP_ERROR_CHECK(uart_param_config(DH_UART_PORT, &uart_config));
+  ESP_ERROR_CHECK(uart_set_pin(DH_UART_PORT, CONFIG_DH_UART_TX_GPIO, CONFIG_DH_UART_RX_GPIO, UART_PIN_NO_CHANGE,
+                               UART_PIN_NO_CHANGE));
   QueueHandle_t uart_queue;
-  ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, CONFIG_DH_UART_BUFFER_SIZE, CONFIG_DH_UART_BUFFER_SIZE, 10,
+  ESP_ERROR_CHECK(uart_driver_install(DH_UART_PORT, CONFIG_DH_UART_BUFFER_SIZE, CONFIG_DH_UART_BUFFER_SIZE, 10,
                                       &uart_queue, intr_alloc_flags));
 #endif
 

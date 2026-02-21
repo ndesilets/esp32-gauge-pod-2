@@ -6,11 +6,33 @@ config DH_ENABLE_FAKE_DATA
     help
         Generate fake telemetry data for testing purposes when enabled.
 
+menu "TWAI"
+
+config DH_TWAI_TX_GPIO
+    int "TWAI TX GPIO"
+    range 0 48
+    default 6
+    help
+        TWAI/CAN TX GPIO pin.
+
+config DH_TWAI_RX_GPIO
+    int "TWAI RX GPIO"
+    range 0 48
+    default 7
+    help
+        TWAI/CAN RX GPIO pin.
+
+endmenu
+
+menu "UART"
+
 config DH_UART_ENABLED
     bool "Enable UART telemetry"
     default y
     help
         Enable UART telemetry connection for data transmission.
+
+if DH_UART_ENABLED
 
 config DH_UART_BUFFER_SIZE
     int "UART buffer size"
@@ -19,11 +41,64 @@ config DH_UART_BUFFER_SIZE
     help
         Size in bytes for the UART RX/TX buffers used by the telemetry connection.
 
+config DH_UART_PORT
+    int "UART port number"
+    range 0 2
+    default 1
+    help
+        UART controller used for telemetry output.
+
+config DH_UART_TX_GPIO
+    int "UART TX GPIO"
+    range 0 48
+    default 17
+    help
+        TX GPIO pin for telemetry UART.
+
+config DH_UART_RX_GPIO
+    int "UART RX GPIO"
+    range 0 48
+    default 18
+    help
+        RX GPIO pin for telemetry UART.
+
+config DH_UART_EMIT_PERIOD_MS
+    int "UART telemetry send period (ms)"
+    range 1 1000
+    default 33
+    help
+        Period for uart_emitter_task transmissions.
+
+endif
+
+endmenu
+
+menu "Car Polling"
+
+config DH_CAR_POLL_PERIOD_MS
+    int "Car data polling period (ms)"
+    range 1 60000
+    default 63
+    help
+        Poll period for car_data_task request loop in milliseconds.
+        Example: 5000 = every 5 seconds.
+
+endmenu
+
+menu "Analog / I2C"
+
 config DH_ANALOG_USE_MOCK
     bool "Use mock analog oil sensors"
     default n
     help
         Use generated mock values instead of reading real ADS1115 hardware.
+
+config DH_ANALOG_POLL_PERIOD_MS
+    int "Analog sensor polling period (ms)"
+    range 1 1000
+    default 20
+    help
+        Poll period for analog_data_task sensor reads.
 
 config DH_ANALOG_I2C_PORT
     int "Analog I2C port"
@@ -35,14 +110,14 @@ config DH_ANALOG_I2C_PORT
 config DH_ANALOG_I2C_SDA_GPIO
     int "Analog I2C SDA GPIO"
     range 0 48
-    default 5
+    default 4
     help
         SDA GPIO pin for ADS1115.
 
 config DH_ANALOG_I2C_SCL_GPIO
     int "Analog I2C SCL GPIO"
     range 0 48
-    default 4
+    default 5
     help
         SCL GPIO pin for ADS1115.
 
@@ -66,5 +141,7 @@ config DH_ANALOG_LOG_PERIOD_MS
     default 500
     help
         Minimum period between analog sensor info logs.
+
+endmenu
 
 endmenu
