@@ -356,11 +356,7 @@ static inline float ssm_ecu_parse_intake_air_temp(uint8_t value) {
 
 static inline float ssm_ecu_parse_afr(uint8_t value) { return (float)value * 14.7f / 128.0f; }
 
-static inline float ssm_ecu_parse_dam(uint32_t value) {
-  float out;
-  memcpy(&out, &value, sizeof(out));
-  return out;
-}
+static inline float ssm_ecu_parse_dam(uint8_t value) { return (float)value * 0.0625f; }
 
 static inline float ssm_ecu_parse_feedback_knock(uint32_t value) {
   float out;
@@ -375,27 +371,42 @@ static inline float ssm_ecu_parse_feedback_knock(uint32_t value) {
         0x00, 0x00, 0x09,  // af correction #1
         0x00, 0x00, 0x0A,  // af learning #1
         0x00, 0x00, 0x0E,  // engine rpm
+        0x00, 0x00, 0x0F,  // engine rpm
         0x00, 0x00, 0x12,  // intake air temperature
         // TODO injector duty cycle
         0x00, 0x00, 0x46,  // afr
         0xFF, 0x6B, 0x49,  // DAM
         0xFF, 0x88, 0x10,  // knock correction
+        0xFF, 0x88, 0x11,  // knock correction
+        0xFF, 0x88, 0x12,  // knock correction
+        0xFF, 0x88, 0x13,  // knock correction
         // TODO ethanol concentration
     };
 */
 
-void ssm_parse_message(uint8_t ssm_payload[], uint8_t length, ssm_ecu_response_t* response) {
-  // ssm_payload structure doesn't change
-  response->water_temp = ssm_ecu_parse_coolant_temp(ssm_payload[0]);
-  response->af_correct = ssm_ecu_parse_af_correction(ssm_payload[1]);
-  response->af_learned = ssm_ecu_parse_af_learning(ssm_payload[2]);
-  response->engine_rpm = ssm_ecu_parse_rpm((uint16_t)((ssm_payload[3] << 8) | ssm_payload[4]));
-  response->int_temp = ssm_ecu_parse_intake_air_temp(ssm_payload[5]);
-  response->af_ratio = ssm_ecu_parse_afr(ssm_payload[6]);
-  response->dam = ssm_ecu_parse_dam((uint32_t)(ssm_payload[7] << 24 | ssm_payload[8] << 16 | ssm_payload[9]) << 8 |
-                                    ssm_payload[10]);
+bool ssm_parse_message(const uint8_t ssm_payload[], size_t length, ssm_ecu_response_t* response) {
+  if (ssm_payload == NULL || response == NULL) {
+    return false;
+  }
+
+  // SSM response payload starts with service id (0xE8).
+  if (length < 13 || ssm_payload[0] != 0xE8) {
+    return false;
+  }
+
+  const uint8_t* data = &ssm_payload[1];
+
+  response->water_temp = ssm_ecu_parse_coolant_temp(data[0]);
+  response->af_correct = ssm_ecu_parse_af_correction(data[1]);
+  response->af_learned = ssm_ecu_parse_af_learning(data[2]);
+  response->engine_rpm = ssm_ecu_parse_rpm((uint16_t)((data[3] << 8) | data[4]));
+  response->int_temp = ssm_ecu_parse_intake_air_temp(data[5]);
+  response->af_ratio = ssm_ecu_parse_afr(data[6]);
+  response->dam = ssm_ecu_parse_dam(data[7]);
   response->fb_knock = ssm_ecu_parse_feedback_knock(
-      (uint32_t)(ssm_payload[11] << 24 | ssm_payload[12] << 16 | ssm_payload[13] << 8 | ssm_payload[14]));
+      (uint32_t)(data[8] << 24 | data[9] << 16 | data[10] << 8 | data[11]));
+
+  return true;
 }
 
 // --- iso-tp stuff
@@ -611,11 +622,15 @@ void car_data_task(void* arg) {
         0x00, 0x00, 0x09,  // af correction #1
         0x00, 0x00, 0x0A,  // af learning #1
         0x00, 0x00, 0x0E,  // engine rpm
+        0x00, 0x00, 0x0F,  // engine rpm
         0x00, 0x00, 0x12,  // intake air temperature
         // TODO injector duty cycle
         0x00, 0x00, 0x46,  // afr
         0xFF, 0x6B, 0x49,  // DAM
         0xFF, 0x88, 0x10,  // knock correction
+        0xFF, 0x88, 0x11,  // knock correction
+        0xFF, 0x88, 0x12,  // knock correction
+        0xFF, 0x88, 0x13,  // knock correction
         // TODO ethanol concentration
     };
     // clang-format on
@@ -785,7 +800,11 @@ void car_data_task(void* arg) {
     // 8. parse msg.data
 
     ssm_ecu_response_t response;
-    ssm_parse_message(assembled.data, assembled.len, &response);
+    if (!ssm_parse_message(assembled.data, assembled.len, &response)) {
+      ESP_LOGW(TAG, "failed to parse SSM response len=%u sid=0x%02X", (unsigned)assembled.len,
+               assembled.len > 0 ? assembled.data[0] : 0x00);
+      continue;
+    }
 
     if (xSemaphoreTake(current_state_mutex, 0) == pdTRUE) {
       current_state.water_temp = response.water_temp;
