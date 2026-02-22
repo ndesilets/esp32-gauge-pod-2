@@ -22,6 +22,14 @@ config DH_TWAI_RX_GPIO
     help
         TWAI/CAN RX GPIO pin.
 
+config DH_TWAI_ISOTP_CF_GAP_US
+    int "ISO-TP consecutive frame gap (us)"
+    range 0 2000
+    default 250
+    help
+        Extra delay inserted after each transmitted ISO-TP consecutive frame.
+        Useful when an ECU is timing-sensitive even when STmin is zero.
+
 endmenu
 
 menu "UART"
