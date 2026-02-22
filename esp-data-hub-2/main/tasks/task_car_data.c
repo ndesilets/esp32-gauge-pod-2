@@ -15,6 +15,21 @@
 
 static const char* TAG = "task_car_data";
 
+void update_display_state(const request_ecu_response_t* response, display_packet_t* state) {
+  if (response == NULL || state == NULL) {
+    return;
+  }
+
+  state->water_temp = response->water_temp;
+  state->af_correct = response->af_correct;
+  state->af_learned = response->af_learned;
+  state->engine_rpm = response->engine_rpm;
+  state->int_temp = response->int_temp;
+  state->af_ratio = response->af_ratio;
+  state->dam = response->dam;
+  state->fb_knock = response->fb_knock;
+}
+
 void task_car_data(void* arg) {
   app_context_t* app = (app_context_t*)arg;
   if (app == NULL || app->node_hdl == NULL) {
@@ -153,7 +168,7 @@ void task_car_data(void* arg) {
       }
     }
 
-    // 8) parse and apply telemetry updates
+    // 8) parse and apply state updates
     request_ecu_response_t response;
     if (!request_ecu_parse_ssm_response(assembled_payload, assembled_len, &response)) {
       ESP_LOGW(TAG, "failed to parse SSM response len=%u sid=0x%02X", (unsigned)assembled_len,
@@ -161,9 +176,9 @@ void task_car_data(void* arg) {
       continue;
     }
 
-    if (xSemaphoreTake(app->current_state_mutex, 0) == pdTRUE) {
-      request_ecu_apply_to_telemetry(&response, &app->current_state);
-      xSemaphoreGive(app->current_state_mutex);
+    if (xSemaphoreTake(app->display_state_mutex, 0) == pdTRUE) {
+      update_display_state(&response, &app->display_state);
+      xSemaphoreGive(app->display_state_mutex);
     }
 
     // --- VDC DATA (scaffold only, intentionally not active)

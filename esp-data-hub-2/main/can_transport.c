@@ -52,21 +52,3 @@ void can_transport_transmit_frame(twai_node_handle_t node_hdl, uint16_t dest, ui
   };
   ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &frame, pdMS_TO_TICKS(100)));
 }
-
-void can_transport_dispatch_can_frame(app_context_t* app, const can_rx_frame_t* frame) {
-  if (app == NULL || frame == NULL) {
-    return;
-  }
-
-  switch (frame->id) {
-    case ECU_RES_ID:
-      xQueueSend(app->ecu_can_frames, frame, pdMS_TO_TICKS(10));
-      break;
-    case VDC_RES_ID:
-      xQueueSend(app->vdc_can_frames, frame, pdMS_TO_TICKS(10));
-      break;
-    default:
-      ESP_LOGW(TAG, "Unhandled CAN frame ID: 0x%03X", frame->id);
-      break;
-  }
-}

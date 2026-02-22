@@ -56,12 +56,12 @@ void task_uart_emitter(void* arg) {
     vTaskDelayUntil(&last_wake, period_ticks);
 
     display_packet_t state_copy;
-    if (xSemaphoreTake(app->current_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-      state_copy = app->current_state;
-      app->current_state.sequence++;
-      xSemaphoreGive(app->current_state_mutex);
+    if (xSemaphoreTake(app->display_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+      state_copy = app->display_state;
+      app->display_state.sequence++;
+      xSemaphoreGive(app->display_state_mutex);
     } else {
-      ESP_LOGW(TAG, "failed to take current_state_mutex");
+      ESP_LOGW(TAG, "failed to take display_state_mutex");
       continue;
     }
 

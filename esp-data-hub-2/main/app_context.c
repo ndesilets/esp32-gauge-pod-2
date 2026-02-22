@@ -19,9 +19,9 @@ void app_context_deinit(app_context_t* ctx) {
     vQueueDelete(ctx->vdc_can_frames);
     ctx->vdc_can_frames = NULL;
   }
-  if (ctx->current_state_mutex != NULL) {
-    vSemaphoreDelete(ctx->current_state_mutex);
-    ctx->current_state_mutex = NULL;
+  if (ctx->display_state_mutex != NULL) {
+    vSemaphoreDelete(ctx->display_state_mutex);
+    ctx->display_state_mutex = NULL;
   }
 }
 
@@ -36,10 +36,10 @@ bool app_context_init(app_context_t* ctx, twai_node_handle_t node_hdl) {
   ctx->can_rx_queue = xQueueCreate(16, sizeof(can_rx_frame_t));
   ctx->ecu_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
   ctx->vdc_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
-  ctx->current_state_mutex = xSemaphoreCreateMutex();
+  ctx->display_state_mutex = xSemaphoreCreateMutex();
 
   if (ctx->can_rx_queue == NULL || ctx->ecu_can_frames == NULL || ctx->vdc_can_frames == NULL ||
-      ctx->current_state_mutex == NULL) {
+      ctx->display_state_mutex == NULL) {
     app_context_deinit(ctx);
     return false;
   }
