@@ -11,6 +11,7 @@
 #include "esp_rom_sys.h"
 #include "isotp.h"
 #include "request_ecu.h"
+#include "request_vdc.h"
 #include "sdkconfig.h"
 
 static const char* TAG = "task_canbus_data";
@@ -30,6 +31,76 @@ void update_display_state(const request_ecu_response_t* response, display_packet
   state->fb_knock = response->fb_knock;
 }
 
+static bool collect_vdc_response_payload(app_context_t* app, uint8_t* out_payload, size_t out_payload_cap,
+                                         size_t* out_payload_len) {
+  if (app == NULL || out_payload == NULL || out_payload_len == NULL) {
+    return false;
+  }
+
+  can_rx_frame_t vdc_first = {0};
+  bool got_vdc_frame = false;
+  while (1) {
+    if (xQueueReceive(app->vdc_can_frames, &vdc_first, pdMS_TO_TICKS(200)) != pdTRUE) {
+      ESP_LOGE(TAG, "Didn't receive response from VDC");
+      break;
+    }
+    if ((vdc_first.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      ESP_LOGW(TAG, "Skipping FC frame while waiting for VDC response");
+      continue;
+    }
+    got_vdc_frame = true;
+    break;
+  }
+  if (!got_vdc_frame) {
+    return false;
+  }
+
+  if ((vdc_first.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
+    isotp_send_flow_control(app->node_hdl, VDC_REQ_ID);
+  }
+
+  if ((vdc_first.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
+    *out_payload_len = vdc_first.data[0] & 0x0F;
+    memcpy(out_payload, &vdc_first.data[1], *out_payload_len);
+    return true;
+  }
+
+  if ((vdc_first.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+    ESP_LOGW(TAG, "Unexpected FC frame when assembling VDC response");
+    return false;
+  }
+
+  size_t expected_len = ((vdc_first.data[0] & 0x0F) << 8) | vdc_first.data[1];
+  can_rx_frame_t vdc_frames[16] = {0};
+  uint8_t frame_idx = 0;
+  vdc_frames[frame_idx++] = vdc_first;
+
+  size_t remaining = (expected_len > 6) ? (expected_len - 6) : 0;
+  uint8_t expected_cfs = (uint8_t)((remaining + 6) / 7);
+  uint8_t expected_frames = (uint8_t)(1 + expected_cfs);
+  const uint8_t max_frames = 16;
+
+  while (frame_idx < expected_frames && frame_idx < max_frames) {
+    can_rx_frame_t vdc_frame = {0};
+    if (xQueueReceive(app->vdc_can_frames, &vdc_frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+      ESP_LOGE(TAG, "Timeout waiting for VDC response frames (%u/%u)", (unsigned)frame_idx, (unsigned)expected_frames);
+      break;
+    }
+    if ((vdc_frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      ESP_LOGW(TAG, "Skipping FC frame during VDC response collection");
+      continue;
+    }
+    vdc_frames[frame_idx++] = vdc_frame;
+  }
+
+  if (!isotp_unwrap_frames(vdc_frames, frame_idx, out_payload, out_payload_cap, out_payload_len)) {
+    ESP_LOGE(TAG, "Failed to unwrap ISO-TP frames from VDC");
+    return false;
+  }
+
+  return true;
+}
+
 void task_canbus_data(void* arg) {
   app_context_t* app = (app_context_t*)arg;
   if (app == NULL || app->node_hdl == NULL) {
@@ -45,7 +116,7 @@ void task_canbus_data(void* arg) {
 
     // drain any stale ECU frames before starting a new request
     can_rx_frame_t stale;
-    while (xQueueReceive(app->ecu_can_frames, &stale, pdMS_TO_TICKS(5)) == pdTRUE) {
+    while (xQueueReceive(app->ecu_can_frames, &stale, pdMS_TO_TICKS(1)) == pdTRUE) {
       ESP_LOGW(TAG, "Drained stale ECU frame ID 0x%0X", stale.id);
     }
 
@@ -169,19 +240,51 @@ void task_canbus_data(void* arg) {
     }
 
     // 8) parse and apply state updates
-    request_ecu_response_t response;
-    if (!request_ecu_parse_ssm_response(assembled_payload, assembled_len, &response)) {
+    request_ecu_response_t ecu_response;
+    if (!request_ecu_parse_ssm_response(assembled_payload, assembled_len, &ecu_response)) {
       ESP_LOGW(TAG, "failed to parse SSM response len=%u sid=0x%02X", (unsigned)assembled_len,
                assembled_len > 0 ? assembled_payload[0] : 0x00);
       continue;
     }
 
-    if (xSemaphoreTake(app->display_state_mutex, 0) == pdTRUE) {
-      update_display_state(&response, &app->display_state);
+    if (xSemaphoreTake(app->display_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+      update_display_state(&ecu_response, &app->display_state);
       xSemaphoreGive(app->display_state_mutex);
+    } else {
+      ESP_LOGW(TAG, "failed to take display_state_mutex");
     }
 
-    // --- VDC DATA (scaffold only, intentionally not active)
-    // request_vdc_send(app->node_hdl);
+    // --- VDC DATA
+
+    while (xQueueReceive(app->vdc_can_frames, &stale, pdMS_TO_TICKS(1)) == pdTRUE) {
+      ESP_LOGW(TAG, "Drained stale VDC frame ID 0x%0X", stale.id);
+    }
+
+    float brake_pressure_bar = 0.0f;
+    float steering_angle_deg = 0.0f;
+
+    uint8_t vdc_payload[128] = {0};
+    size_t vdc_payload_len = 0;
+
+    request_vdc_send(app->node_hdl);
+    if (!collect_vdc_response_payload(app, vdc_payload, sizeof(vdc_payload), &vdc_payload_len)) {
+      continue;
+    }
+    if (!request_vdc_parse_response(vdc_payload, vdc_payload_len, &brake_pressure_bar, &steering_angle_deg)) {
+      ESP_LOGW(TAG, "failed to parse VDC response len=%u sid=0x%02X", (unsigned)vdc_payload_len,
+               vdc_payload_len > 0 ? vdc_payload[0] : 0x00);
+      continue;
+    }
+
+    if (xSemaphoreTake(app->bt_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+      app->bt_state.throttle_pos = ecu_response.throttle_pos;
+      app->bt_state.brake_pressure_bar = brake_pressure_bar;
+      app->bt_state.steering_angle_deg = steering_angle_deg;
+      app->bt_state.engine_rpm = ecu_response.engine_rpm;
+      app->bt_state.sequence++;
+      xSemaphoreGive(app->bt_state_mutex);
+    } else {
+      ESP_LOGW(TAG, "failed to take bt_state_mutex");
+    }
   }
 }

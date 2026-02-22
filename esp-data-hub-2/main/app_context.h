@@ -12,6 +12,8 @@ typedef struct {
   twai_node_handle_t node_hdl;
   display_packet_t display_state;
   SemaphoreHandle_t display_state_mutex;
+  bt_packet_t bt_state;
+  SemaphoreHandle_t bt_state_mutex;
   QueueHandle_t can_rx_queue;
   QueueHandle_t ecu_can_frames;
   QueueHandle_t vdc_can_frames;

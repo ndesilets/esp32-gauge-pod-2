@@ -19,6 +19,7 @@ typedef struct {
 
   float fb_knock;
   float af_correct;
+  float throttle_pos;
   float inj_duty;
   float eth_conc;
 

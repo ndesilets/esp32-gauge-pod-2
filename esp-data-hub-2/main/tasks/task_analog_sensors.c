@@ -46,7 +46,7 @@ void task_analog_sensors(void* arg) {
       app->display_state.oil_pressure = reading.oil_pressure_psi;
       xSemaphoreGive(app->display_state_mutex);
     } else {
-      ESP_LOGW(TAG, "analog task failed to take display_state_mutex");
+      ESP_LOGW(TAG, "failed to take display_state_mutex");
     }
 
     TickType_t now = xTaskGetTickCount();

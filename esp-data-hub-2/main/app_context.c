@@ -23,6 +23,10 @@ void app_context_deinit(app_context_t* ctx) {
     vSemaphoreDelete(ctx->display_state_mutex);
     ctx->display_state_mutex = NULL;
   }
+  if (ctx->bt_state_mutex != NULL) {
+    vSemaphoreDelete(ctx->bt_state_mutex);
+    ctx->bt_state_mutex = NULL;
+  }
 }
 
 bool app_context_init(app_context_t* ctx, twai_node_handle_t node_hdl) {
@@ -37,9 +41,10 @@ bool app_context_init(app_context_t* ctx, twai_node_handle_t node_hdl) {
   ctx->ecu_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
   ctx->vdc_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
   ctx->display_state_mutex = xSemaphoreCreateMutex();
+  ctx->bt_state_mutex = xSemaphoreCreateMutex();
 
   if (ctx->can_rx_queue == NULL || ctx->ecu_can_frames == NULL || ctx->vdc_can_frames == NULL ||
-      ctx->display_state_mutex == NULL) {
+      ctx->display_state_mutex == NULL || ctx->bt_state_mutex == NULL) {
     app_context_deinit(ctx);
     return false;
   }
