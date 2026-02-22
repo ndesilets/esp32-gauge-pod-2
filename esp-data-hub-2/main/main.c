@@ -712,15 +712,9 @@ void car_data_task(void* arg) {
 
     // 2. send first frame of ecu data request
 
-    twai_frame_t msg = {
-        .header.id = ECU_REQ_ID,
-        .header.ide = false,
-        .buffer = can_frames[0],
-        // .buffer_len = (isotp_payload_frame_count > 1) ? 8 : (payload_len + 1),
-        .buffer_len = 8,  // it's always going to be 8 here
-    };
-    ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(100)));
-    // debug_log_frame(false, msg.buffer, msg.buffer_len);
+    // .buffer_len = (isotp_payload_frame_count > 1) ? 8 : (payload_len + 1),
+    transmit_frame(node_hdl, ECU_REQ_ID, can_frames[0], 8);  // it's always going to be 8 here
+    // debug_log_frame(false, can_frames[0], 8);
 
     // ESP_LOGI(TAG, "Sent first message");
 
@@ -740,13 +734,7 @@ void car_data_task(void* arg) {
       bool sent_all_cfs = true;
       uint8_t frames_sent_in_block = 0;
       for (uint8_t i = 1; i < isotp_payload_frame_count; i++) {
-        twai_frame_t cf_msg = {
-            .header.id = ECU_REQ_ID,
-            .header.ide = false,
-            .buffer = can_frames[i],
-            .buffer_len = 8,
-        };
-        ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &cf_msg, pdMS_TO_TICKS(100)));
+        transmit_frame(node_hdl, ECU_REQ_ID, can_frames[i], 8);
         // this is to fix an issue where it seems to otherwise send data too quickly
         if (CONFIG_DH_TWAI_ISOTP_CF_GAP_US > 0) {
           esp_rom_delay_us(CONFIG_DH_TWAI_ISOTP_CF_GAP_US);
