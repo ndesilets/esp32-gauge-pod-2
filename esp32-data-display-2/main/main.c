@@ -35,6 +35,22 @@ ui_state_t ui_state = OVERVIEW;
 lv_obj_t* overview_screen;
 lv_obj_t* metric_detail_screen;
 lv_obj_t* options_screen;
+dd_options_screen_t options_ui;
+
+#define DD_SETTINGS_NAMESPACE "dd_settings"
+#define DD_SETTINGS_KEY_BRIGHTNESS "brightness"
+#define DD_SETTINGS_KEY_VOLUME "volume"
+#define DD_DEFAULT_BRIGHTNESS 50
+
+typedef struct {
+  int brightness;
+  int volume;
+} app_settings_t;
+
+static app_settings_t app_settings = {
+    .brightness = DD_DEFAULT_BRIGHTNESS,
+    .volume = 0,
+};
 
 monitored_state_t m_state = {
     .water_temp = {.status = STATUS_OK},
@@ -51,6 +67,105 @@ monitored_state_t m_state = {
 };
 SemaphoreHandle_t m_state_mutex;
 
+static int clamp_int(int value, int min_value, int max_value) {
+  if (value < min_value) {
+    return min_value;
+  }
+  if (value > max_value) {
+    return max_value;
+  }
+  return value;
+}
+
+static int brightness_to_percent(int raw_brightness) {
+  int clamped = clamp_int(raw_brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
+  int range = BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX - BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN;
+  if (range <= 0) {
+    return 0;
+  }
+  return ((clamped - BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN) * 100) / range;
+}
+
+static esp_err_t init_settings_storage(void) {
+  esp_err_t err = nvs_flash_init();
+  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    ESP_RETURN_ON_ERROR(nvs_flash_erase(), TAG, "Failed to erase NVS");
+    err = nvs_flash_init();
+  }
+  return err;
+}
+
+static esp_err_t load_app_settings(app_settings_t* settings) {
+  nvs_handle_t handle;
+  esp_err_t err = nvs_open(DD_SETTINGS_NAMESPACE, NVS_READONLY, &handle);
+  if (err == ESP_ERR_NVS_NOT_FOUND) {
+    return ESP_OK;
+  }
+  ESP_RETURN_ON_ERROR(err, TAG, "Failed to open settings namespace");
+
+  int32_t brightness = settings->brightness;
+  int32_t volume = settings->volume;
+
+  err = nvs_get_i32(handle, DD_SETTINGS_KEY_BRIGHTNESS, &brightness);
+  if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+    nvs_close(handle);
+    ESP_RETURN_ON_ERROR(err, TAG, "Failed to read brightness setting");
+  }
+
+  err = nvs_get_i32(handle, DD_SETTINGS_KEY_VOLUME, &volume);
+  if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+    nvs_close(handle);
+    ESP_RETURN_ON_ERROR(err, TAG, "Failed to read volume setting");
+  }
+
+  nvs_close(handle);
+
+  settings->brightness = clamp_int(brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
+  settings->volume = clamp_int(volume, 0, 100);
+  return ESP_OK;
+}
+
+static esp_err_t save_app_settings(const app_settings_t* settings) {
+  nvs_handle_t handle;
+  esp_err_t err = nvs_open(DD_SETTINGS_NAMESPACE, NVS_READWRITE, &handle);
+  ESP_RETURN_ON_ERROR(err, TAG, "Failed to open settings NVS");
+
+  err = nvs_set_i32(handle, DD_SETTINGS_KEY_BRIGHTNESS, settings->brightness);
+  if (err != ESP_OK) {
+    nvs_close(handle);
+    ESP_RETURN_ON_ERROR(err, TAG, "Failed to write brightness");
+  }
+
+  err = nvs_set_i32(handle, DD_SETTINGS_KEY_VOLUME, settings->volume);
+  if (err != ESP_OK) {
+    nvs_close(handle);
+    ESP_RETURN_ON_ERROR(err, TAG, "Failed to write volume");
+  }
+
+  err = nvs_commit(handle);
+  if (err != ESP_OK) {
+    nvs_close(handle);
+    ESP_RETURN_ON_ERROR(err, TAG, "Failed to commit settings");
+  }
+
+  nvs_close(handle);
+  return ESP_OK;
+}
+
+static void update_options_value_labels(void) {
+  if (!options_ui.brightness_value_label || !options_ui.volume_value_label) {
+    return;
+  }
+
+  lv_label_set_text_fmt(options_ui.brightness_value_label, "%d%%", brightness_to_percent(app_settings.brightness));
+  lv_label_set_text_fmt(options_ui.volume_value_label, "%d%%", app_settings.volume);
+}
+
+static void load_overview_screen(void) {
+  ui_state = OVERVIEW;
+  lv_screen_load(overview_screen);
+}
+
 // ====== ui callback stuff =======
 
 static void on_reset_button_clicked(lv_event_t* e) {
@@ -62,12 +177,47 @@ static void on_reset_button_clicked(lv_event_t* e) {
 
 static void on_options_button_clicked(lv_event_t* e) {
   ESP_LOGI(TAG, "Options button clicked");
+  ui_state = OPTIONS;
   lv_screen_load(options_screen);
 }
 
 static void on_record_button_clicked(lv_event_t* e) {
   ESP_LOGI(TAG, "Record button clicked");
   // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+}
+
+static void on_options_slider_event(lv_event_t* e) {
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t* target = lv_event_get_target(e);
+
+  if (target == options_ui.brightness_slider) {
+    app_settings.brightness = clamp_int(lv_slider_get_value(options_ui.brightness_slider), BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN,
+                                        BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
+    bsp_display_brightness_set(app_settings.brightness);
+  } else if (target == options_ui.volume_slider) {
+    app_settings.volume = clamp_int(lv_slider_get_value(options_ui.volume_slider), 0, 100);
+    esp_err_t volume_err = bsp_extra_codec_volume_set(app_settings.volume, NULL);
+    if (volume_err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to set volume: %s", esp_err_to_name(volume_err));
+    }
+  }
+
+  update_options_value_labels();
+
+  if (code == LV_EVENT_RELEASED) {
+    esp_err_t save_err = save_app_settings(&app_settings);
+    if (save_err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to persist settings: %s", esp_err_to_name(save_err));
+    }
+  }
+}
+
+static void on_options_done_clicked(lv_event_t* e) {
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+    return;
+  }
+  ESP_LOGI(TAG, "Options done clicked");
+  load_overview_screen();
 }
 
 // ====== tasks =======
@@ -81,7 +231,7 @@ static void main_loop_task(void* arg) {
 
     // --- get the data
 
-    telemetry_packet_t packet;
+    display_packet_t packet;
     bool received = get_data(&packet);
 
     // --- do monitoring
@@ -163,6 +313,7 @@ void app_main(void) {
   // --- init vars
 
   m_state_mutex = xSemaphoreCreateMutex();
+  ESP_ERROR_CHECK(init_settings_storage());
 
   // --- init UART
 
@@ -189,6 +340,11 @@ void app_main(void) {
   ESP_ERROR_CHECK(bsp_extra_codec_init());
   ESP_ERROR_CHECK(bsp_extra_player_init());
 
+  app_settings.brightness = DD_DEFAULT_BRIGHTNESS;
+  app_settings.volume = clamp_int(bsp_extra_codec_volume_get(), 0, 100);
+  ESP_ERROR_CHECK(load_app_settings(&app_settings));
+  ESP_ERROR_CHECK(bsp_extra_codec_volume_set(app_settings.volume, NULL));
+
   // --- init display
 
   // anything that involves changing background opacity seems to benefit from full size buffer + spiram
@@ -205,7 +361,7 @@ void app_main(void) {
                            }};
   bsp_display_start_with_config(&cfg);
   bsp_display_backlight_on();
-  bsp_display_brightness_set(50);
+  bsp_display_brightness_set(app_settings.brightness);
 
   // --- init littlefs
 
@@ -238,7 +394,12 @@ void app_main(void) {
   dd_set_metric_detail_screen(metric_detail_screen);
 
   options_screen = lv_obj_create(NULL);
-  dd_set_options_screen(options_screen);
+  dd_set_options_screen(options_screen, &options_ui, app_settings.brightness, app_settings.volume);
+  lv_obj_add_event_cb(options_ui.brightness_slider, on_options_slider_event, LV_EVENT_VALUE_CHANGED, NULL);
+  lv_obj_add_event_cb(options_ui.brightness_slider, on_options_slider_event, LV_EVENT_RELEASED, NULL);
+  lv_obj_add_event_cb(options_ui.volume_slider, on_options_slider_event, LV_EVENT_VALUE_CHANGED, NULL);
+  lv_obj_add_event_cb(options_ui.volume_slider, on_options_slider_event, LV_EVENT_RELEASED, NULL);
+  lv_obj_add_event_cb(options_ui.done_button, on_options_done_clicked, LV_EVENT_CLICKED, NULL);
 
   // lv_screen_load(options_screen);
   lv_screen_load(overview_screen);

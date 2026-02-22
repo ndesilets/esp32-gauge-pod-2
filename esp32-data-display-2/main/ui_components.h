@@ -20,6 +20,14 @@ typedef struct {
   lv_obj_t* max_val;
 } simple_metric_t;
 
+typedef struct {
+  lv_obj_t* brightness_slider;
+  lv_obj_t* brightness_value_label;
+  lv_obj_t* volume_slider;
+  lv_obj_t* volume_value_label;
+  lv_obj_t* done_button;
+} dd_options_screen_t;
+
 // --- general purpose stuff
 
 void dd_init_styles();
@@ -61,4 +69,4 @@ void dd_update_metric_detail_screen(monitored_state_t m_state);
 
 // options
 
-void dd_set_options_screen(lv_obj_t* screen);
+void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initial_brightness, int initial_volume);
