@@ -82,7 +82,7 @@ bool request_ecu_parse_ssm_response(const uint8_t* ssm_payload, size_t length, r
   return true;
 }
 
-void request_ecu_apply_to_telemetry(const request_ecu_response_t* response, telemetry_packet_t* telemetry) {
+void request_ecu_apply_to_telemetry(const request_ecu_response_t* response, display_packet_t* telemetry) {
   if (response == NULL || telemetry == NULL) {
     return;
   }

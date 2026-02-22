@@ -1,4 +1,4 @@
-#include "task_analog_data.h"
+#include "task_analog_sensors.h"
 
 #include "analog_sensors.h"
 #include "app_context.h"
@@ -6,9 +6,9 @@
 #include "esp_log.h"
 #include "sdkconfig.h"
 
-static const char* TAG = "task_analog_data";
+static const char* TAG = "task_analog_sensors";
 
-void task_analog_data(void* arg) {
+void task_analog_sensors(void* arg) {
   app_context_t* app = (app_context_t*)arg;
   if (app == NULL) {
     vTaskDelete(NULL);

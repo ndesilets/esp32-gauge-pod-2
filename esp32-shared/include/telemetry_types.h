@@ -23,4 +23,4 @@ typedef struct {
 
   // supplemental
   float engine_rpm;
-} telemetry_packet_t;
+} display_packet_t;

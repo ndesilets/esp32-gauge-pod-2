@@ -10,7 +10,7 @@
 
 typedef struct {
   twai_node_handle_t node_hdl;
-  telemetry_packet_t current_state;
+  display_packet_t current_state;
   SemaphoreHandle_t current_state_mutex;
   QueueHandle_t can_rx_queue;
   QueueHandle_t ecu_can_frames;

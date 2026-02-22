@@ -16,13 +16,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
-#include "task_analog_data.h"
-#include "task_can_rx_dispatcher.h"
-#include "task_car_data.h"
-#include "task_twai_monitor.h"
-#include "task_uart_emitter.h"
+#include "tasks/task_analog_sensors.h"
+#include "tasks/task_can_rx_dispatcher.h"
+#include "tasks/task_car_data.h"
+#include "tasks/task_twai_monitor.h"
+#include "tasks/task_uart_emitter.h"
 
-static const char* TAG = "data_hub";
+static const char* TAG = "app_main";
 #define DH_UART_PORT ((uart_port_t)CONFIG_DH_UART_PORT)
 
 void app_main(void) {
@@ -70,7 +70,7 @@ void app_main(void) {
 
   xTaskCreate(task_car_data, "task_car_data", 8192 * 2, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(task_can_rx_dispatcher, "task_can_rx_dispatcher", 8192, (void*)&app, tskIDLE_PRIORITY + 2, NULL);
-  xTaskCreate(task_analog_data, "task_analog_data", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(task_analog_sensors, "task_analog_sensors", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(task_twai_monitor, "task_twai_monitor", 4096, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
 #ifdef CONFIG_DH_UART_ENABLED
   xTaskCreate(task_uart_emitter, "task_uart_emitter", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
