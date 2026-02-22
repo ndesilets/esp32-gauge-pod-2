@@ -34,8 +34,8 @@ SemaphoreHandle_t current_state_mutex;
 
 #define ECU_REQ_ID 0x7E0
 #define ECU_RES_ID 0x7E8
-#define ABS_REQ_ID 0x7B0
-#define ABS_RES_ID 0x7B8  // TODO: this is probably more accurate as VDC
+#define VDC_REQ_ID 0x7B0
+#define VDC_RES_ID 0x7B8
 
 // --- twai queues
 
@@ -64,7 +64,7 @@ typedef struct {
 
 static QueueHandle_t can_rx_queue = NULL;           // raw can frames
 static QueueHandle_t ecu_can_frames = NULL;         // can frames from 0x7E8
-static QueueHandle_t abs_can_frames = NULL;         // can frames from 0x7B8
+static QueueHandle_t vdc_can_frames = NULL;         // can frames from 0x7B8
 static QueueHandle_t assembled_isotp_queue = NULL;  // assembled isotp messages
 
 static void isotp_wait_stmin(uint8_t stmin_raw) {
@@ -611,7 +611,7 @@ static bool isotp_unwrap_frames(const can_rx_frame_t frames[16], size_t frame_co
   return false;
 }
 
-void send_abs_data_request(twai_node_handle_t node_hdl) {
+void send_vdc_data_request(twai_node_handle_t node_hdl) {
   // --- uds payload
 
   // uds payload with no iso-tp framing etc.
@@ -888,15 +888,15 @@ void car_data_task(void* arg) {
       //          current_state.eth_conc, current_state.engine_rpm);
     }
 
-    // --- ABS DATA
+    // --- VDC DATA
 
-    // send_abs_data_request(node_hdl);
+    // send_vdc_data_request(node_hdl);
     // if (xQueueReceive(assembled_isotp_queue, &msg, portMAX_DELAY) != pdTRUE) {
     //   continue;
     // }
 
     // TODO parse msg.data
-    // TODO update state with abs data
+    // TODO update state with vdc data
   }
 }
 
@@ -907,8 +907,8 @@ void dispatch_can_frame(can_rx_frame_t* frame) {
     case ECU_RES_ID:
       xQueueSend(ecu_can_frames, frame, pdMS_TO_TICKS(10));
       break;
-    case ABS_RES_ID:
-      xQueueSend(abs_can_frames, frame, pdMS_TO_TICKS(10));
+    case VDC_RES_ID:
+      xQueueSend(vdc_can_frames, frame, pdMS_TO_TICKS(10));
       break;
     default:
       ESP_LOGW(TAG, "Unhandled CAN frame ID: 0x%03X", frame->id);
@@ -1019,10 +1019,10 @@ void app_main(void) {
 
   can_rx_queue = xQueueCreate(16, sizeof(can_rx_frame_t));
   ecu_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
-  abs_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
+  vdc_can_frames = xQueueCreate(16, sizeof(can_rx_frame_t));
   assembled_isotp_queue = xQueueCreate(16, sizeof(assembled_isotp_t));
 
-  if (can_rx_queue == NULL || assembled_isotp_queue == NULL || ecu_can_frames == NULL || abs_can_frames == NULL) {
+  if (can_rx_queue == NULL || assembled_isotp_queue == NULL || ecu_can_frames == NULL || vdc_can_frames == NULL) {
     ESP_LOGE(TAG, "Failed to create TWAI queues");
     return;
   }
