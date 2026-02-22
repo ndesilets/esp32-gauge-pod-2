@@ -2,4 +2,4 @@
 
 #include "telemetry_types.h"
 
-bool get_data(telemetry_packet_t* packet);
+bool get_data(display_packet_t* packet);

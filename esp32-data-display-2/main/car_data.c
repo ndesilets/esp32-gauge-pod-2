@@ -28,10 +28,10 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
   return lo + normalized * (hi - lo);
 }
 
-telemetry_packet_t get_data() {
+display_packet_t get_data() {
   static int i = 0;
 
-  telemetry_packet_t packet = {
+  display_packet_t packet = {
       // metadata
       .sequence = i,
       .timestamp_ms = esp_timer_get_time() / 1000,
@@ -66,7 +66,7 @@ telemetry_packet_t get_data() {
 
 static const char* TAG = "car_data";
 
-static bool decode_telemetry_packet(const uint8_t* payload, size_t length, telemetry_packet_t* packet) {
+static bool decode_telemetry_packet(const uint8_t* payload, size_t length, display_packet_t* packet) {
   CborParser parser;
   CborValue root;
   CborError err = cbor_parser_init(payload, length, 0, &parser, &root);
@@ -140,7 +140,7 @@ static bool decode_telemetry_packet(const uint8_t* payload, size_t length, telem
   return true;
 }
 
-bool get_data(telemetry_packet_t* packet) {
+bool get_data(display_packet_t* packet) {
   uint8_t payload[CONFIG_DD_UART_BUFFER_SIZE];
   int payload_len = 0;
 
