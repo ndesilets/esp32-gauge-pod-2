@@ -480,7 +480,7 @@ simple_metric_t dam;
 simple_metric_t iat;
 
 void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clicked,
-                            lv_event_cb_t on_options_button_clicked, lv_event_cb_t on_record_button_clicked) {
+                            lv_event_cb_t on_options_button_clicked, lv_event_cb_t on_log_button_clicked) {
   lv_obj_set_size(screen, LV_PCT(100), LV_PCT(100));
   dd_set_screen(screen);
 
@@ -537,9 +537,9 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clic
   dd_set_action_button(options_button, "OPTIONS");
   lv_obj_add_event_cb(options_button, on_options_button_clicked, LV_EVENT_CLICKED, NULL);
 
-  lv_obj_t* record_button = lv_btn_create(third_row);
-  dd_set_action_button(record_button, "RECORD");
-  lv_obj_add_event_cb(record_button, on_record_button_clicked, LV_EVENT_CLICKED, NULL);
+  lv_obj_t* log_button = lv_btn_create(third_row);
+  dd_set_action_button(log_button, "LOG");
+  lv_obj_add_event_cb(log_button, on_log_button_clicked, LV_EVENT_CLICKED, NULL);
 }
 
 void dd_update_overview_screen(monitored_state_t m_state) {

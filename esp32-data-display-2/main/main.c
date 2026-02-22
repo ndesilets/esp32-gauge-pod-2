@@ -181,8 +181,8 @@ static void on_options_button_clicked(lv_event_t* e) {
   lv_screen_load(options_screen);
 }
 
-static void on_record_button_clicked(lv_event_t* e) {
-  ESP_LOGI(TAG, "Record button clicked");
+static void on_log_button_clicked(lv_event_t* e) {
+  ESP_LOGI(TAG, "Log button clicked");
   // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
 }
 
@@ -191,8 +191,8 @@ static void on_options_slider_event(lv_event_t* e) {
   lv_obj_t* target = lv_event_get_target(e);
 
   if (target == options_ui.brightness_slider) {
-    app_settings.brightness = clamp_int(lv_slider_get_value(options_ui.brightness_slider), BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN,
-                                        BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
+    app_settings.brightness = clamp_int(lv_slider_get_value(options_ui.brightness_slider),
+                                        BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
     bsp_display_brightness_set(app_settings.brightness);
   } else if (target == options_ui.volume_slider) {
     app_settings.volume = clamp_int(lv_slider_get_value(options_ui.volume_slider), 0, 100);
@@ -388,7 +388,7 @@ void app_main(void) {
   // setup screens
 
   overview_screen = lv_obj_create(NULL);
-  dd_set_overview_screen(overview_screen, on_reset_button_clicked, on_options_button_clicked, on_record_button_clicked);
+  dd_set_overview_screen(overview_screen, on_reset_button_clicked, on_options_button_clicked, on_log_button_clicked);
 
   metric_detail_screen = lv_obj_create(NULL);
   dd_set_metric_detail_screen(metric_detail_screen);
