@@ -1,4 +1,4 @@
-#include "task_car_data.h"
+#include "task_canbus_data.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -13,7 +13,7 @@
 #include "request_ecu.h"
 #include "sdkconfig.h"
 
-static const char* TAG = "task_car_data";
+static const char* TAG = "task_canbus_data";
 
 void update_display_state(const request_ecu_response_t* response, display_packet_t* state) {
   if (response == NULL || state == NULL) {
@@ -30,7 +30,7 @@ void update_display_state(const request_ecu_response_t* response, display_packet
   state->fb_knock = response->fb_knock;
 }
 
-void task_car_data(void* arg) {
+void task_canbus_data(void* arg) {
   app_context_t* app = (app_context_t*)arg;
   if (app == NULL || app->node_hdl == NULL) {
     vTaskDelete(NULL);

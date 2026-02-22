@@ -18,7 +18,7 @@
 #include "sdkconfig.h"
 #include "tasks/task_analog_sensors.h"
 #include "tasks/task_can_rx_dispatcher.h"
-#include "tasks/task_car_data.h"
+#include "tasks/task_canbus_data.h"
 #include "tasks/task_twai_monitor.h"
 #include "tasks/task_uart_emitter.h"
 
@@ -68,7 +68,7 @@ void app_main(void) {
                                       &uart_queue, intr_alloc_flags));
 #endif
 
-  xTaskCreate(task_car_data, "task_car_data", 8192 * 2, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
+  xTaskCreate(task_canbus_data, "task_canbus_data", 8192 * 2, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(task_can_rx_dispatcher, "task_can_rx_dispatcher", 8192, (void*)&app, tskIDLE_PRIORITY + 2, NULL);
   xTaskCreate(task_analog_sensors, "task_analog_sensors", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(task_twai_monitor, "task_twai_monitor", 4096, (void*)&app, tskIDLE_PRIORITY + 1, NULL);

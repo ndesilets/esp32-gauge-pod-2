@@ -88,7 +88,7 @@ config DH_CAR_POLL_PERIOD_MS
     range 1 60000
     default 63
     help
-        Poll period for car_data_task request loop in milliseconds.
+        Poll period for canbus_data_task request loop in milliseconds.
         Example: 5000 = every 5 seconds.
 
 endmenu
