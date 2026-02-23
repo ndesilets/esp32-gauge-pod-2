@@ -556,13 +556,17 @@ void dd_update_overview_screen(monitored_state_t m_state) {
                        m_state.af_learned.max_value, m_state.af_learned.status);
   simple_metric_update(&afr, m_state.af_ratio.current_value, m_state.af_ratio.min_value, m_state.af_ratio.max_value,
                        m_state.af_ratio.status);
+  simple_metric_update(&iat, m_state.int_temp.current_value, m_state.int_temp.min_value, m_state.int_temp.max_value,
+                       m_state.int_temp.status);
+
   simple_metric_update(&fb_knock, m_state.fb_knock.current_value, m_state.fb_knock.min_value,
                        m_state.fb_knock.max_value, m_state.fb_knock.status);
-
-  simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.min_value,
-                       m_state.eth_conc.max_value, m_state.eth_conc.status);
+  simple_metric_update(&af_correct, m_state.af_correct.current_value, m_state.af_correct.min_value,
+                       m_state.af_correct.max_value, m_state.af_correct.status);
   simple_metric_update(&inj_duty, m_state.inj_duty.current_value, m_state.inj_duty.min_value,
                        m_state.inj_duty.max_value, m_state.inj_duty.status);
+  simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.min_value,
+                       m_state.eth_conc.max_value, m_state.eth_conc.status);
 }
 
 void dd_set_metric_detail_screen(lv_obj_t* screen) {}
