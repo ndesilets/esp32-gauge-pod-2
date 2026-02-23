@@ -28,10 +28,14 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
   return lo + normalized * (hi - lo);
 }
 
-display_packet_t get_data() {
+bool get_data(display_packet_t* packet) {
+  if (!packet) {
+    return false;
+  }
+
   static int i = 0;
 
-  display_packet_t packet = {
+  *packet = (display_packet_t){
       // metadata
       .sequence = i,
       .timestamp_ms = esp_timer_get_time() / 1000,
@@ -57,7 +61,7 @@ display_packet_t get_data() {
 
   i++;
 
-  return packet;
+  return true;
 }
 #else
 #include "cbor.h"
@@ -65,6 +69,7 @@ display_packet_t get_data() {
 #include "esp_log.h"
 
 static const char* TAG = "car_data";
+static const size_t DISPLAY_PACKET_CBOR_ITEMS = 14;
 
 static bool decode_telemetry_packet(const uint8_t* payload, size_t length, display_packet_t* packet) {
   CborParser parser;
@@ -80,7 +85,7 @@ static bool decode_telemetry_packet(const uint8_t* payload, size_t length, displ
 
   size_t array_len = 0;
   err = cbor_value_get_array_length(&root, &array_len);
-  if (err != CborNoError || array_len < 14) {
+  if (err != CborNoError || array_len != DISPLAY_PACKET_CBOR_ITEMS) {
     ESP_LOGW(TAG, "CBOR array length invalid: len=%d err=%d", (int)array_len, err);
     return false;
   }
@@ -93,12 +98,16 @@ static bool decode_telemetry_packet(const uint8_t* payload, size_t length, displ
   }
 
   CborError field_err = CborNoError;
-#define DECODE_UINT_FIELD(field)                   \
-  do {                                             \
-    uint64_t tmp = 0;                              \
-    field_err |= cbor_value_get_uint64(&it, &tmp); \
-    packet->field = (uint32_t)tmp;                 \
-    field_err |= cbor_value_advance(&it);          \
+#define DECODE_UINT_FIELD(field)                     \
+  do {                                               \
+    uint64_t tmp = 0;                                \
+    field_err |= cbor_value_get_uint64(&it, &tmp);   \
+    if (tmp > UINT32_MAX) {                          \
+      ESP_LOGW(TAG, "CBOR uint overflow for " #field); \
+      return false;                                  \
+    }                                                \
+    packet->field = (uint32_t)tmp;                   \
+    field_err |= cbor_value_advance(&it);            \
   } while (0)
 
 #define DECODE_FLOAT_FIELD(field)                 \
@@ -109,23 +118,20 @@ static bool decode_telemetry_packet(const uint8_t* payload, size_t length, displ
     field_err |= cbor_value_advance(&it);         \
   } while (0)
 
+  // Keep this order and type mapping aligned with esp-data-hub task_uart_emitter.c::encode_display_packet().
   DECODE_UINT_FIELD(sequence);
   DECODE_UINT_FIELD(timestamp_ms);
-
   DECODE_FLOAT_FIELD(water_temp);
   DECODE_FLOAT_FIELD(oil_temp);
   DECODE_FLOAT_FIELD(oil_pressure);
-
   DECODE_FLOAT_FIELD(dam);
   DECODE_FLOAT_FIELD(af_learned);
   DECODE_FLOAT_FIELD(af_ratio);
   DECODE_FLOAT_FIELD(int_temp);
-
   DECODE_FLOAT_FIELD(fb_knock);
   DECODE_FLOAT_FIELD(af_correct);
   DECODE_FLOAT_FIELD(inj_duty);
   DECODE_FLOAT_FIELD(eth_conc);
-
   DECODE_FLOAT_FIELD(engine_rpm);
 
 #undef DECODE_UINT_FIELD
@@ -141,6 +147,10 @@ static bool decode_telemetry_packet(const uint8_t* payload, size_t length, displ
 }
 
 bool get_data(display_packet_t* packet) {
+  if (!packet) {
+    return false;
+  }
+
   uint8_t payload[CONFIG_DD_UART_BUFFER_SIZE];
   int payload_len = 0;
 
