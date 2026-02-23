@@ -13,8 +13,8 @@
 #include "logger.h"
 #include "monitoring.h"
 #include "sdkconfig.h"
-#include "ui_controller.h"
 #include "uart_pipeline_task.h"
+#include "ui_controller.h"
 
 static const char* TAG = "app";
 
@@ -24,12 +24,12 @@ monitored_state_t m_state = {
     .oil_pressure = {.status = STATUS_OK},
     .dam = {.current_value = 1.0, .status = STATUS_OK},
     .af_learned = {.current_value = 0.0, .status = STATUS_OK},
-    .af_ratio = {.current_value = 14.7, .status = STATUS_OK},
-    .int_temp = {.current_value = 67.0, .status = STATUS_OK},
+    .af_ratio = {.current_value = 0.0, .status = STATUS_OK},
+    .int_temp = {.current_value = 0.0, .status = STATUS_OK},
     .fb_knock = {.current_value = 0.0, .status = STATUS_OK},
     .af_correct = {.current_value = 0.0, .status = STATUS_OK},
     .inj_duty = {.current_value = 0.0, .status = STATUS_OK},
-    .eth_conc = {.current_value = 67.0, .status = STATUS_OK},
+    .eth_conc = {.current_value = 0.0, .status = STATUS_OK},
 };
 
 static SemaphoreHandle_t m_state_mutex;
