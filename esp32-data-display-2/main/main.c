@@ -21,6 +21,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
+#include "logger.h"
 #include "math.h"
 #include "monitoring.h"
 #include "nvs.h"
@@ -66,6 +67,8 @@ monitored_state_t m_state = {
     .eth_conc = {.current_value = 67.0, .status = STATUS_OK},
 };
 SemaphoreHandle_t m_state_mutex;
+static lv_obj_t* log_button_obj = NULL;
+static bool log_button_is_active = false;
 
 static int clamp_int(int value, int min_value, int max_value) {
   if (value < min_value) {
@@ -166,6 +169,24 @@ static void load_overview_screen(void) {
   lv_screen_load(overview_screen);
 }
 
+static void set_log_button_active_style(lv_obj_t* btn, bool active) {
+  if (!btn) {
+    return;
+  }
+
+  if (active) {
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+  } else {
+    lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn, lv_color_white(), LV_PART_MAIN);
+  }
+
+  log_button_is_active = active;
+}
+
 // ====== ui callback stuff =======
 
 static void on_reset_button_clicked(lv_event_t* e) {
@@ -182,8 +203,24 @@ static void on_options_button_clicked(lv_event_t* e) {
 }
 
 static void on_log_button_clicked(lv_event_t* e) {
-  ESP_LOGI(TAG, "Log button clicked");
-  // ESP_ERROR_CHECK(bsp_extra_player_play_file("/storage/audio/FAHHH.wav"));
+  log_button_obj = lv_event_get_target(e);
+
+  if (dd_logger_is_active()) {
+    ESP_LOGI(TAG, "Stopping logger");
+    dd_logger_stop();
+    set_log_button_active_style(log_button_obj, false);
+    return;
+  }
+
+  esp_err_t err = dd_logger_start();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to start logger: %s", esp_err_to_name(err));
+    set_log_button_active_style(log_button_obj, false);
+    return;
+  }
+
+  ESP_LOGI(TAG, "Logger started");
+  set_log_button_active_style(log_button_obj, true);
 }
 
 static void on_options_slider_event(lv_event_t* e) {
@@ -281,6 +318,10 @@ static void main_loop_task(void* arg) {
     // --- update display
 
     if (bsp_display_lock(pdMS_TO_TICKS(100))) {
+      if (log_button_obj && log_button_is_active && !dd_logger_is_active()) {
+        set_log_button_active_style(log_button_obj, false);
+      }
+
       switch (ui_state) {
         case OVERVIEW:
           dd_update_overview_screen(m_state);
@@ -314,6 +355,11 @@ void app_main(void) {
 
   m_state_mutex = xSemaphoreCreateMutex();
   ESP_ERROR_CHECK(init_settings_storage());
+
+  esp_err_t logger_init_err = dd_logger_init(&m_state, m_state_mutex);
+  if (logger_init_err != ESP_OK) {
+    ESP_LOGW(TAG, "Logger init failed, SD logging unavailable: %s", esp_err_to_name(logger_init_err));
+  }
 
   // --- init UART
 
