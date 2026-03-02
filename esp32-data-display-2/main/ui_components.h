@@ -69,12 +69,12 @@ void dd_set_extremely_awesome_splash_screen(lv_obj_t* screen);
 
 void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clicked,
                             lv_event_cb_t on_options_button_clicked, lv_event_cb_t on_log_button_clicked);
-void dd_update_overview_screen(monitored_state_t m_state);
+void dd_update_overview_screen(const monitored_state_t* m_state);
 
 // metric detail
 
 void dd_set_metric_detail_screen(lv_obj_t* screen);
-void dd_update_metric_detail_screen(monitored_state_t m_state);
+void dd_update_metric_detail_screen(const monitored_state_t* m_state);
 
 // options
 

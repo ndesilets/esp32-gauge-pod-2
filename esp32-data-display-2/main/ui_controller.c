@@ -290,10 +290,10 @@ void dd_ui_controller_render(const monitored_state_t* snapshot) {
 
   switch (s_ui_state) {
     case OVERVIEW:
-      dd_update_overview_screen(*snapshot);
+      dd_update_overview_screen(snapshot);
       break;
     case METRIC_DETAIL:
-      dd_update_metric_detail_screen(*snapshot);
+      dd_update_metric_detail_screen(snapshot);
       break;
     case OPTIONS:
       break;

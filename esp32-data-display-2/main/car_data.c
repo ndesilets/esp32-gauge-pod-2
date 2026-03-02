@@ -42,7 +42,7 @@ bool get_data(display_packet_t* packet) {
 
       // primary
       // .water_temp = wrap_range(i / 4, 190, 240),
-      .oil_temp = wrap_range(i / 4, 200, 300),
+      .oil_temp = wrap_range(i / 10, 200, 300),
       // .oil_pressure = wrap_range(i / 4, 0, 100),
 
       // .dam = map_sine_to_range(sinf(i / 50.0f), 0, 1.049),

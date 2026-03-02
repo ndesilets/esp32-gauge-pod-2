@@ -22,6 +22,8 @@ lv_style_t dd_flex_row_style;
 lv_style_t dd_flex_col_style;
 lv_style_t button_style;
 lv_style_t button_style_pressed;
+static lv_style_t s_bar_bg_style;
+static lv_style_t s_bar_indic_style;
 
 void dd_init_styles() {
   // --- screen
@@ -80,6 +82,23 @@ void dd_init_styles() {
   lv_style_set_bg_opa(&button_style_pressed, LV_OPA_50);
   lv_style_set_bg_color(&button_style_pressed, lv_palette_darken(LV_PALETTE_BLUE, 2));
   lv_style_set_bg_grad_color(&button_style_pressed, lv_palette_darken(LV_PALETTE_BLUE, 4));
+
+  // --- framed panel bar styles (shared across all framed_panel instances)
+
+  lv_style_init(&s_bar_bg_style);
+  lv_style_set_border_color(&s_bar_bg_style, SubaruReddishOrangeThing);
+  lv_style_set_border_width(&s_bar_bg_style, 2);
+  lv_style_set_pad_left(&s_bar_bg_style, 6);
+  lv_style_set_pad_right(&s_bar_bg_style, 6);
+  lv_style_set_pad_top(&s_bar_bg_style, 6);
+  lv_style_set_pad_bottom(&s_bar_bg_style, 6);
+  lv_style_set_radius(&s_bar_bg_style, 6);
+  lv_style_set_anim_duration(&s_bar_bg_style, 1000);
+
+  lv_style_init(&s_bar_indic_style);
+  lv_style_set_bg_opa(&s_bar_indic_style, LV_OPA_COVER);
+  lv_style_set_bg_color(&s_bar_indic_style, lv_color_white());
+  lv_style_set_radius(&s_bar_indic_style, 2);
 }
 
 void dd_set_screen(lv_obj_t* obj) {
@@ -258,28 +277,10 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_
 
   // bar / scale
 
-  static lv_style_t style_bg;
-  static lv_style_t style_indic;
-
-  lv_style_init(&style_bg);
-  lv_style_set_border_color(&style_bg, SubaruReddishOrangeThing);
-  lv_style_set_border_width(&style_bg, 2);
-  lv_style_set_pad_left(&style_bg, 6);
-  lv_style_set_pad_right(&style_bg, 6);
-  lv_style_set_pad_top(&style_bg, 6);
-  lv_style_set_pad_bottom(&style_bg, 6);
-  lv_style_set_radius(&style_bg, 6);
-  lv_style_set_anim_duration(&style_bg, 1000);
-
-  lv_style_init(&style_indic);
-  lv_style_set_bg_opa(&style_indic, LV_OPA_COVER);
-  lv_style_set_bg_color(&style_indic, lv_color_white());
-  lv_style_set_radius(&style_indic, 2);
-
   out.bar = lv_bar_create(out.body);
   lv_obj_remove_style_all(out.bar);
-  lv_obj_add_style(out.bar, &style_bg, 0);
-  lv_obj_add_style(out.bar, &style_indic, LV_PART_INDICATOR);
+  lv_obj_add_style(out.bar, &s_bar_bg_style, 0);
+  lv_obj_add_style(out.bar, &s_bar_indic_style, LV_PART_INDICATOR);
 
   lv_obj_set_size(out.bar, LV_PCT(100) - 8, 24);
   lv_bar_set_range(out.bar, min_bar_value, max_bar_value);
@@ -561,19 +562,19 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_clear_button_clic
   lv_obj_add_event_cb(log_button, on_log_button_clicked, LV_EVENT_CLICKED, NULL);
 }
 
-void dd_update_overview_screen(monitored_state_t m_state) {
+void dd_update_overview_screen(const monitored_state_t* m_state) {
   static monitored_state_t prev = {0};
   static bool first_run = true;
 
   // Macro for:
   // framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.min_value,
                       // m_state.water_temp.max_value, m_state.water_temp.status);
-
+                      
 // clang-format off
 #define UPDATE_IF_CHANGED(widget_fn, widget, field) \
-  if (first_run || memcmp(&prev.field, &m_state.field, sizeof(numeric_monitor_t)) != 0) { \
-    widget_fn(&widget, m_state.field.current_value, m_state.field.min_value, \
-              m_state.field.max_value, m_state.field.status); \
+  if (first_run || memcmp(&prev.field, &m_state->field, sizeof(numeric_monitor_t)) != 0) { \
+    widget_fn(&widget, m_state->field.current_value, m_state->field.min_value, \
+              m_state->field.max_value, m_state->field.status); \
   }
 
   UPDATE_IF_CHANGED(framed_panel_update, water_temp_panel, water_temp);
@@ -606,12 +607,12 @@ void dd_update_overview_screen(monitored_state_t m_state) {
   tick_alert_fade(inj_duty.container, &inj_duty.alert_fade);
   tick_alert_fade(eth_conc.container, &eth_conc.alert_fade);
 
-  prev = m_state;
+  prev = *m_state;
   first_run = false;
 }
 
 void dd_set_metric_detail_screen(lv_obj_t* screen) {}
-void dd_update_metric_detail_screen(monitored_state_t m_state) {}
+void dd_update_metric_detail_screen(const monitored_state_t* m_state) {}
 
 // options
 
