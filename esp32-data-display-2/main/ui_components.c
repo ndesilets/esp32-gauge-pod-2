@@ -1,5 +1,7 @@
 #include "ui_components.h"
 
+#include <string.h>
+
 #include "bsp_board_extra.h"
 #include "driver/jpeg_decode.h"
 #include "fonts.h"
@@ -543,30 +545,40 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_clear_button_clic
 }
 
 void dd_update_overview_screen(monitored_state_t m_state) {
-  framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.min_value,
-                      m_state.water_temp.max_value, m_state.water_temp.status);
-  framed_panel_update(&oil_temp_panel, m_state.oil_temp.current_value, m_state.oil_temp.min_value,
-                      m_state.oil_temp.max_value, m_state.oil_temp.status);
-  framed_panel_update(&oil_psi_panel, m_state.oil_pressure.current_value, m_state.oil_pressure.min_value,
-                      m_state.oil_pressure.max_value, m_state.oil_pressure.status);
+  static monitored_state_t prev = {0};
+  static bool first_run = true;
 
-  simple_metric_update(&dam, m_state.dam.current_value, m_state.dam.min_value, m_state.dam.max_value,
-                       m_state.dam.status);
-  simple_metric_update(&af_learned, m_state.af_learned.current_value, m_state.af_learned.min_value,
-                       m_state.af_learned.max_value, m_state.af_learned.status);
-  simple_metric_update(&afr, m_state.af_ratio.current_value, m_state.af_ratio.min_value, m_state.af_ratio.max_value,
-                       m_state.af_ratio.status);
-  simple_metric_update(&iat, m_state.int_temp.current_value, m_state.int_temp.min_value, m_state.int_temp.max_value,
-                       m_state.int_temp.status);
+// clang-format off
+#define UPDATE_IF_CHANGED(widget_fn, widget, field) \
 
-  simple_metric_update(&fb_knock, m_state.fb_knock.current_value, m_state.fb_knock.min_value,
-                       m_state.fb_knock.max_value, m_state.fb_knock.status);
-  simple_metric_update(&af_correct, m_state.af_correct.current_value, m_state.af_correct.min_value,
-                       m_state.af_correct.max_value, m_state.af_correct.status);
-  simple_metric_update(&inj_duty, m_state.inj_duty.current_value, m_state.inj_duty.min_value,
-                       m_state.inj_duty.max_value, m_state.inj_duty.status);
-  simple_metric_update(&eth_conc, m_state.eth_conc.current_value, m_state.eth_conc.min_value,
-                       m_state.eth_conc.max_value, m_state.eth_conc.status);
+  // Macro for:
+  // framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.min_value,
+                      // m_state.water_temp.max_value, m_state.water_temp.status);
+
+  if (first_run || memcmp(&prev.field, &m_state.field, sizeof(numeric_monitor_t)) != 0) { \
+    widget_fn(&widget, m_state.field.current_value, m_state.field.min_value, \
+              m_state.field.max_value, m_state.field.status); \
+  }
+
+  UPDATE_IF_CHANGED(framed_panel_update, water_temp_panel, water_temp);
+  UPDATE_IF_CHANGED(framed_panel_update, oil_temp_panel, oil_temp);
+  UPDATE_IF_CHANGED(framed_panel_update, oil_psi_panel, oil_pressure);
+
+  UPDATE_IF_CHANGED(simple_metric_update, dam, dam);
+  UPDATE_IF_CHANGED(simple_metric_update, af_learned, af_learned);
+  UPDATE_IF_CHANGED(simple_metric_update, afr, af_ratio);
+  UPDATE_IF_CHANGED(simple_metric_update, iat, int_temp);
+
+  UPDATE_IF_CHANGED(simple_metric_update, fb_knock, fb_knock);
+  UPDATE_IF_CHANGED(simple_metric_update, af_correct, af_correct);
+  UPDATE_IF_CHANGED(simple_metric_update, inj_duty, inj_duty);
+  UPDATE_IF_CHANGED(simple_metric_update, eth_conc, eth_conc);
+
+#undef UPDATE_IF_CHANGED
+// clang-format on
+
+  prev = m_state;
+  first_run = false;
 }
 
 void dd_set_metric_detail_screen(lv_obj_t* screen) {}
