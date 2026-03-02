@@ -45,24 +45,6 @@ static app_settings_t s_app_settings = {
     .volume = 0,
 };
 
-static int clamp_int(int value, int min_value, int max_value) {
-  if (value < min_value) {
-    return min_value;
-  }
-  if (value > max_value) {
-    return max_value;
-  }
-  return value;
-}
-
-static int brightness_to_percent(int raw_brightness) {
-  int clamped = clamp_int(raw_brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
-  int range = BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX - BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN;
-  if (range <= 0) {
-    return 0;
-  }
-  return ((clamped - BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN) * 100) / range;
-}
 
 static esp_err_t init_settings_storage(void) {
   esp_err_t err = nvs_flash_init();
@@ -135,7 +117,7 @@ static void update_options_value_labels(void) {
     return;
   }
 
-  lv_label_set_text_fmt(s_options_ui.brightness_value_label, "%d%%", brightness_to_percent(s_app_settings.brightness));
+  lv_label_set_text_fmt(s_options_ui.brightness_value_label, "%d%%", brightness_raw_to_percent(s_app_settings.brightness));
   lv_label_set_text_fmt(s_options_ui.volume_value_label, "%d%%", s_app_settings.volume);
 }
 

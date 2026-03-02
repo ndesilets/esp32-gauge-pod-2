@@ -325,29 +325,31 @@ static void tick_alert_fade(lv_obj_t* container, alert_fade_t* fade) {
   }
 }
 
-void framed_panel_update(framed_panel_t* panel, int cur_val, int min_val, int max_val, monitor_status status) {
-  lv_label_set_text_fmt(panel->main_value, "%d", cur_val);
-  lv_label_set_text_fmt(panel->minmax_value, "%d / %d", min_val, max_val);
-  lv_bar_set_value(panel->bar, cur_val, LV_ANIM_OFF);
-
-  alert_fade_t* fade = &panel->alert_fade;
+static void apply_alert_state(lv_obj_t* container, alert_fade_t* fade, monitor_status status) {
   bool is_alert = (status == STATUS_WARN || status == STATUS_CRITICAL);
   bool was_alert = (fade->last_status == STATUS_WARN || fade->last_status == STATUS_CRITICAL);
 
   if (is_alert) {
     lv_color_t color = (status == STATUS_CRITICAL) ? lv_palette_main(LV_PALETTE_RED)
                                                    : lv_palette_main(LV_PALETTE_YELLOW);
-    lv_obj_set_style_bg_opa(panel->container, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(panel->container, color, 0);
+    lv_obj_set_style_bg_opa(container, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(container, color, 0);
     fade->active = false;
     fade->color = color;
   } else if (was_alert) {
     fade->active = true;
     fade->start_ms = lv_tick_get();
   } else if (!fade->active) {
-    lv_obj_set_style_bg_opa(panel->container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, 0);
   }
   fade->last_status = status;
+}
+
+void framed_panel_update(framed_panel_t* panel, int cur_val, int min_val, int max_val, monitor_status status) {
+  lv_label_set_text_fmt(panel->main_value, "%d", cur_val);
+  lv_label_set_text_fmt(panel->minmax_value, "%d / %d", min_val, max_val);
+  lv_bar_set_value(panel->bar, cur_val, LV_ANIM_OFF);
+  apply_alert_state(panel->container, &panel->alert_fade, status);
 }
 
 /*
@@ -413,25 +415,7 @@ void simple_metric_update(simple_metric_t* metric, float cur_val, float min_val,
   lv_label_set_text_fmt(metric->min_val, "%.1f", min_val);
   lv_label_set_text_fmt(metric->cur_val, "%.1f", cur_val);
   lv_label_set_text_fmt(metric->max_val, "%.1f", max_val);
-
-  alert_fade_t* fade = &metric->alert_fade;
-  bool is_alert = (status == STATUS_WARN || status == STATUS_CRITICAL);
-  bool was_alert = (fade->last_status == STATUS_WARN || fade->last_status == STATUS_CRITICAL);
-
-  if (is_alert) {
-    lv_color_t color = (status == STATUS_CRITICAL) ? lv_palette_main(LV_PALETTE_RED)
-                                                   : lv_palette_main(LV_PALETTE_YELLOW);
-    lv_obj_set_style_bg_opa(metric->container, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(metric->container, color, 0);
-    fade->active = false;
-    fade->color = color;
-  } else if (was_alert) {
-    fade->active = true;
-    fade->start_ms = lv_tick_get();
-  } else if (!fade->active) {
-    lv_obj_set_style_bg_opa(metric->container, LV_OPA_TRANSP, 0);
-  }
-  fade->last_status = status;
+  apply_alert_state(metric->container, &metric->alert_fade, status);
 }
 
 // ====================================================================================================================
@@ -616,7 +600,7 @@ void dd_update_metric_detail_screen(const monitored_state_t* m_state) {}
 
 // options
 
-static int _clamp_int(int value, int min_value, int max_value) {
+int clamp_int(int value, int min_value, int max_value) {
   if (value < min_value) {
     return min_value;
   }
@@ -626,8 +610,8 @@ static int _clamp_int(int value, int min_value, int max_value) {
   return value;
 }
 
-static int _brightness_raw_to_percent(int raw_brightness) {
-  int clamped = _clamp_int(raw_brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
+int brightness_raw_to_percent(int raw_brightness) {
+  int clamped = clamp_int(raw_brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
   int range = BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX - BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN;
   if (range <= 0) {
     return 0;
@@ -641,8 +625,8 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
   lv_obj_set_style_pad_all(screen, 0, 0);
   lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-  int brightness = _clamp_int(initial_brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
-  int volume = _clamp_int(initial_volume, 0, 100);
+  int brightness = clamp_int(initial_brightness, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
+  int volume = clamp_int(initial_volume, 0, 100);
 
   lv_obj_t* card = lv_obj_create(screen);
   lv_obj_set_size(card, LV_PCT(100), LV_PCT(100));
@@ -690,7 +674,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
   lv_obj_set_style_text_font(brightness_header, &lv_font_montserrat_30, 0);
 
   lv_obj_t* brightness_value = lv_label_create(brightness_header_row);
-  lv_label_set_text_fmt(brightness_value, "%d%%", _brightness_raw_to_percent(brightness));
+  lv_label_set_text_fmt(brightness_value, "%d%%", brightness_raw_to_percent(brightness));
   lv_obj_set_style_text_font(brightness_value, &lv_font_montserrat_30, 0);
   lv_obj_set_style_text_color(brightness_value, SubaruReddishOrangeThing, 0);
 

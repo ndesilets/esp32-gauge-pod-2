@@ -39,6 +39,9 @@ typedef struct {
 
 // --- general purpose stuff
 
+int clamp_int(int value, int min_value, int max_value);
+int brightness_raw_to_percent(int raw_brightness);
+
 void dd_init_styles();
 void dd_set_screen(lv_obj_t* obj);
 void dd_set_flex_row(lv_obj_t* obj);
