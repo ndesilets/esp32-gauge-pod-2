@@ -479,7 +479,7 @@ simple_metric_t inj_duty;
 simple_metric_t dam;
 simple_metric_t iat;
 
-void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clicked,
+void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_clear_button_clicked,
                             lv_event_cb_t on_options_button_clicked, lv_event_cb_t on_log_button_clicked) {
   lv_obj_set_size(screen, LV_PCT(100), LV_PCT(100));
   dd_set_screen(screen);
@@ -529,9 +529,9 @@ void dd_set_overview_screen(lv_obj_t* screen, lv_event_cb_t on_reset_button_clic
   lv_obj_t* third_row = lv_obj_create(screen);
   dd_set_framed_controls_row(third_row);
 
-  lv_obj_t* reset_button = lv_btn_create(third_row);
-  dd_set_action_button(reset_button, "RESET");
-  lv_obj_add_event_cb(reset_button, on_reset_button_clicked, LV_EVENT_CLICKED, NULL);
+  lv_obj_t* clear_button = lv_btn_create(third_row);
+  dd_set_action_button(clear_button, "CLEAR");
+  lv_obj_add_event_cb(clear_button, on_clear_button_clicked, LV_EVENT_CLICKED, NULL);
 
   lv_obj_t* options_button = lv_btn_create(third_row);
   dd_set_action_button(options_button, "OPTIONS");
@@ -603,21 +603,18 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
   int volume = _clamp_int(initial_volume, 0, 100);
 
   lv_obj_t* card = lv_obj_create(screen);
-  lv_obj_set_size(card, LV_PCT(76), LV_PCT(68));
-  lv_obj_center(card);
+  lv_obj_set_size(card, LV_PCT(100), LV_PCT(100));
   lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(card, lv_color_hex(0x111111), 0);
-  lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(card, 3, 0);
-  lv_obj_set_style_border_color(card, SubaruReddishOrangeThing, 0);
-  lv_obj_set_style_radius(card, 20, 0);
-  lv_obj_set_style_pad_left(card, 30, 0);
-  lv_obj_set_style_pad_right(card, 30, 0);
+  lv_obj_set_style_bg_opa(card, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(card, 0, 0);
+  lv_obj_set_style_radius(card, 0, 0);
+  lv_obj_set_style_pad_left(card, 40, 0);
+  lv_obj_set_style_pad_right(card, 40, 0);
   lv_obj_set_style_pad_top(card, 22, 0);
   lv_obj_set_style_pad_bottom(card, 18, 0);
   lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_row(card, 18, 0);
+  lv_obj_set_style_pad_row(card, 80, 0);
 
   lv_obj_t* title = lv_label_create(card);
   lv_label_set_text(title, "OPTIONS");
@@ -631,6 +628,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
   lv_obj_set_style_bg_opa(brightness_block, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(brightness_block, 0, 0);
   lv_obj_set_style_pad_all(brightness_block, 0, 0);
+  lv_obj_set_style_pad_bottom(brightness_block, 16, 0);
   lv_obj_set_style_pad_row(brightness_block, 12, 0);
   lv_obj_clear_flag(brightness_block, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(brightness_block, LV_FLEX_FLOW_COLUMN);
@@ -647,7 +645,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
 
   lv_obj_t* brightness_header = lv_label_create(brightness_header_row);
   lv_label_set_text(brightness_header, "Brightness");
-  lv_obj_set_style_text_font(brightness_header, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(brightness_header, &lv_font_montserrat_30, 0);
 
   lv_obj_t* brightness_value = lv_label_create(brightness_header_row);
   lv_label_set_text_fmt(brightness_value, "%d%%", _brightness_raw_to_percent(brightness));
@@ -656,7 +654,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
 
   lv_obj_t* brightness_slider = lv_slider_create(brightness_block);
   lv_obj_set_width(brightness_slider, LV_PCT(100));
-  lv_obj_set_height(brightness_slider, 18);
+  lv_obj_set_height(brightness_slider, 24);
   lv_slider_set_range(brightness_slider, BSP_LCD_BACKLIGHT_BRIGHTNESS_MIN, BSP_LCD_BACKLIGHT_BRIGHTNESS_MAX);
   lv_slider_set_value(brightness_slider, brightness, LV_ANIM_OFF);
 
@@ -665,6 +663,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
   lv_obj_set_style_bg_opa(volume_block, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(volume_block, 0, 0);
   lv_obj_set_style_pad_all(volume_block, 0, 0);
+  lv_obj_set_style_pad_bottom(volume_block, 16, 0);
   lv_obj_set_style_pad_row(volume_block, 12, 0);
   lv_obj_clear_flag(volume_block, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(volume_block, LV_FLEX_FLOW_COLUMN);
@@ -681,7 +680,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
 
   lv_obj_t* volume_header = lv_label_create(volume_header_row);
   lv_label_set_text(volume_header, "Volume");
-  lv_obj_set_style_text_font(volume_header, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(volume_header, &lv_font_montserrat_30, 0);
 
   lv_obj_t* volume_value = lv_label_create(volume_header_row);
   lv_label_set_text_fmt(volume_value, "%d%%", volume);
@@ -690,7 +689,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
 
   lv_obj_t* volume_slider = lv_slider_create(volume_block);
   lv_obj_set_width(volume_slider, LV_PCT(100));
-  lv_obj_set_height(volume_slider, 18);
+  lv_obj_set_height(volume_slider, 24);
   lv_slider_set_range(volume_slider, 0, 100);
   lv_slider_set_value(volume_slider, volume, LV_ANIM_OFF);
 
@@ -705,7 +704,7 @@ void dd_set_options_screen(lv_obj_t* screen, dd_options_screen_t* out, int initi
   lv_obj_t* done_button = lv_btn_create(card);
   lv_obj_add_style(done_button, &button_style, 0);
   lv_obj_add_style(done_button, &button_style_pressed, LV_STATE_PRESSED);
-  lv_obj_set_size(done_button, 220, 72);
+  lv_obj_set_size(done_button, 280, 84);
   lv_obj_set_style_border_color(done_button, SubaruReddishOrangeThing, 0);
 
   lv_obj_t* done_label = lv_label_create(done_button);
