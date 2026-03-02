@@ -62,8 +62,16 @@ void evaluate_statuses(monitored_state_t* m_state, unsigned int engine_rpm) {
     m_state->oil_temp.status = STATUS_CRITICAL;
   }
 
-  // TODO: oil pressure alarm
-  // needs to be correlated with engine RPM within +- some range
+  // should have at least 10 psi per 1000 RPM, capped at 60 psi
+  // TODO: model a curve one day but this is close enough for now.
+  if (engine_rpm < 300) {
+    m_state->oil_pressure.status = STATUS_NOT_READY;
+  } else {
+    float min_psi = (float)engine_rpm / 100.0f;
+    if (min_psi > 60.0f) min_psi = 60.0f;
+    m_state->oil_pressure.status =
+        (m_state->oil_pressure.current_value < min_psi) ? STATUS_CRITICAL : STATUS_OK;
+  }
 
   if (m_state->dam.current_value < 1.0) {
     m_state->dam.status = STATUS_CRITICAL;
