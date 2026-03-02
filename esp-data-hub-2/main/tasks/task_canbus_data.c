@@ -153,7 +153,9 @@ void task_canbus_data(void* arg) {
       uint8_t frames_sent_in_block = 0;
       for (uint8_t i = 1; i < isotp_payload_frame_count; i++) {
         can_transport_transmit_frame(app->node_hdl, ECU_REQ_ID, can_frames[i], 8);
-        // This avoids ECU timing issues at max speed on some units.
+
+        // Intentional busy-wait: the ECU doesn't like it if you send the rest too quickly,
+        // it basically just won't reply at all iirc. But waiting ~250us fixes it
         if (CONFIG_DH_TWAI_ISOTP_CF_GAP_US > 0) {
           esp_rom_delay_us(CONFIG_DH_TWAI_ISOTP_CF_GAP_US);
         }

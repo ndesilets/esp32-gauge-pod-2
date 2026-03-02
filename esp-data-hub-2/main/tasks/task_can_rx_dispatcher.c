@@ -40,7 +40,7 @@ void task_can_rx_dispatcher(void* arg) {
     can_transport_dispatch_can_frame(app, &frame);
 
     // drain any backlog without blocking
-    while (xQueueReceive(app->can_rx_queue, &frame, pdMS_TO_TICKS(10)) == pdTRUE) {
+    while (xQueueReceive(app->can_rx_queue, &frame, 0) == pdTRUE) {
       can_transport_dispatch_can_frame(app, &frame);
     }
   }
