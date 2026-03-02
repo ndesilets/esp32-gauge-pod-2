@@ -89,6 +89,13 @@ void app_main(void) {
   }
 
   ESP_ERROR_CHECK(dd_ui_controller_init(&shared_state));
+
+#ifndef CONFIG_DD_ENABLE_FAKE_DATA
+  // Flush stale UART bytes that accumulated during splash/init so the
+  // pipeline starts on a clean packet boundary.
+  uart_flush_input(UART_NUM_1);
+#endif
+
   ESP_ERROR_CHECK(dd_uart_pipeline_start(&shared_state));
   ESP_ERROR_CHECK(dd_display_render_start(&shared_state));
 }
