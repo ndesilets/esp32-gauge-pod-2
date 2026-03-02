@@ -309,28 +309,44 @@ framed_panel_t framed_panel_create(lv_obj_t* parent, const char* title, int cur_
   return out;
 }
 
+#define ALERT_FADE_DURATION_MS 5000
+
+static void tick_alert_fade(lv_obj_t* container, alert_fade_t* fade) {
+  if (!fade->active) return;
+
+  uint32_t elapsed = lv_tick_elaps(fade->start_ms);
+  if (elapsed >= ALERT_FADE_DURATION_MS) {
+    fade->active = false;
+    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, 0);
+  } else {
+    int opa = LV_OPA_50 - (LV_OPA_50 * elapsed / ALERT_FADE_DURATION_MS);
+    lv_obj_set_style_bg_opa(container, opa, 0);
+  }
+}
+
 void framed_panel_update(framed_panel_t* panel, int cur_val, int min_val, int max_val, monitor_status status) {
   lv_label_set_text_fmt(panel->main_value, "%d", cur_val);
   lv_label_set_text_fmt(panel->minmax_value, "%d / %d", min_val, max_val);
   lv_bar_set_value(panel->bar, cur_val, LV_ANIM_OFF);
 
-  int bg_opa;
-  lv_color_t bg_color;
-  switch (status) {
-    case STATUS_WARN:
-      bg_opa = LV_OPA_50;
-      bg_color = lv_palette_main(LV_PALETTE_YELLOW);
-      break;
-    case STATUS_CRITICAL:
-      bg_opa = LV_OPA_50;
-      bg_color = lv_palette_main(LV_PALETTE_RED);
-      break;
-    default:
-      bg_opa = LV_OPA_TRANSP;
-      bg_color = lv_color_black();
+  alert_fade_t* fade = &panel->alert_fade;
+  bool is_alert = (status == STATUS_WARN || status == STATUS_CRITICAL);
+  bool was_alert = (fade->last_status == STATUS_WARN || fade->last_status == STATUS_CRITICAL);
+
+  if (is_alert) {
+    lv_color_t color = (status == STATUS_CRITICAL) ? lv_palette_main(LV_PALETTE_RED)
+                                                   : lv_palette_main(LV_PALETTE_YELLOW);
+    lv_obj_set_style_bg_opa(panel->container, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(panel->container, color, 0);
+    fade->active = false;
+    fade->color = color;
+  } else if (was_alert) {
+    fade->active = true;
+    fade->start_ms = lv_tick_get();
+  } else if (!fade->active) {
+    lv_obj_set_style_bg_opa(panel->container, LV_OPA_TRANSP, 0);
   }
-  lv_obj_set_style_bg_opa(panel->container, bg_opa, 0);
-  lv_obj_set_style_bg_color(panel->container, bg_color, 0);
+  fade->last_status = status;
 }
 
 /*
@@ -397,23 +413,24 @@ void simple_metric_update(simple_metric_t* metric, float cur_val, float min_val,
   lv_label_set_text_fmt(metric->cur_val, "%.1f", cur_val);
   lv_label_set_text_fmt(metric->max_val, "%.1f", max_val);
 
-  int bg_opa;
-  lv_color_t bg_color;
-  switch (status) {
-    case STATUS_WARN:
-      bg_opa = LV_OPA_50;
-      bg_color = lv_palette_main(LV_PALETTE_YELLOW);
-      break;
-    case STATUS_CRITICAL:
-      bg_opa = LV_OPA_50;
-      bg_color = lv_palette_main(LV_PALETTE_RED);
-      break;
-    default:
-      bg_opa = LV_OPA_TRANSP;
-      bg_color = lv_color_black();
+  alert_fade_t* fade = &metric->alert_fade;
+  bool is_alert = (status == STATUS_WARN || status == STATUS_CRITICAL);
+  bool was_alert = (fade->last_status == STATUS_WARN || fade->last_status == STATUS_CRITICAL);
+
+  if (is_alert) {
+    lv_color_t color = (status == STATUS_CRITICAL) ? lv_palette_main(LV_PALETTE_RED)
+                                                   : lv_palette_main(LV_PALETTE_YELLOW);
+    lv_obj_set_style_bg_opa(metric->container, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(metric->container, color, 0);
+    fade->active = false;
+    fade->color = color;
+  } else if (was_alert) {
+    fade->active = true;
+    fade->start_ms = lv_tick_get();
+  } else if (!fade->active) {
+    lv_obj_set_style_bg_opa(metric->container, LV_OPA_TRANSP, 0);
   }
-  lv_obj_set_style_bg_opa(metric->container, bg_opa, 0);
-  lv_obj_set_style_bg_color(metric->container, bg_color, 0);
+  fade->last_status = status;
 }
 
 // ====================================================================================================================
@@ -548,13 +565,12 @@ void dd_update_overview_screen(monitored_state_t m_state) {
   static monitored_state_t prev = {0};
   static bool first_run = true;
 
-// clang-format off
-#define UPDATE_IF_CHANGED(widget_fn, widget, field) \
-
   // Macro for:
   // framed_panel_update(&water_temp_panel, m_state.water_temp.current_value, m_state.water_temp.min_value,
                       // m_state.water_temp.max_value, m_state.water_temp.status);
 
+// clang-format off
+#define UPDATE_IF_CHANGED(widget_fn, widget, field) \
   if (first_run || memcmp(&prev.field, &m_state.field, sizeof(numeric_monitor_t)) != 0) { \
     widget_fn(&widget, m_state.field.current_value, m_state.field.min_value, \
               m_state.field.max_value, m_state.field.status); \
@@ -576,6 +592,19 @@ void dd_update_overview_screen(monitored_state_t m_state) {
 
 #undef UPDATE_IF_CHANGED
 // clang-format on
+
+  // tick fade animations every frame regardless of state diff
+  tick_alert_fade(water_temp_panel.container, &water_temp_panel.alert_fade);
+  tick_alert_fade(oil_temp_panel.container, &oil_temp_panel.alert_fade);
+  tick_alert_fade(oil_psi_panel.container, &oil_psi_panel.alert_fade);
+  tick_alert_fade(dam.container, &dam.alert_fade);
+  tick_alert_fade(af_learned.container, &af_learned.alert_fade);
+  tick_alert_fade(afr.container, &afr.alert_fade);
+  tick_alert_fade(iat.container, &iat.alert_fade);
+  tick_alert_fade(fb_knock.container, &fb_knock.alert_fade);
+  tick_alert_fade(af_correct.container, &af_correct.alert_fade);
+  tick_alert_fade(inj_duty.container, &inj_duty.alert_fade);
+  tick_alert_fade(eth_conc.container, &eth_conc.alert_fade);
 
   prev = m_state;
   first_run = false;

@@ -2,6 +2,13 @@
 #include "monitoring.h"
 
 typedef struct {
+  bool active;                 // fade in progress
+  uint32_t start_ms;           // lv_tick_get() when fade started
+  lv_color_t color;            // color being faded (red or yellow)
+  monitor_status last_status;  // previous status for transition detection
+} alert_fade_t;
+
+typedef struct {
   lv_obj_t* container;
   lv_obj_t* frame;
   lv_obj_t* title;
@@ -9,6 +16,7 @@ typedef struct {
   lv_obj_t* main_value;
   lv_obj_t* minmax_value;
   lv_obj_t* bar;
+  alert_fade_t alert_fade;
 } framed_panel_t;
 
 typedef struct {
@@ -18,6 +26,7 @@ typedef struct {
   lv_obj_t* min_val;
   lv_obj_t* cur_val;
   lv_obj_t* max_val;
+  alert_fade_t alert_fade;
 } simple_metric_t;
 
 typedef struct {
