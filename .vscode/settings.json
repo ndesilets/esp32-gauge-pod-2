@@ -1,0 +1,8 @@
+{
+  "search.exclude": {
+    "**/.claude": true
+  },
+  "files.exclude": {
+    "**/.claude": true
+  }
+}
