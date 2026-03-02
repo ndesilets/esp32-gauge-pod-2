@@ -31,70 +31,70 @@ void update_display_state(const request_ecu_response_t* response, display_packet
   state->fb_knock = response->fb_knock;
 }
 
-static bool collect_vdc_response_payload(app_context_t* app, uint8_t* out_payload, size_t out_payload_cap,
-                                         size_t* out_payload_len) {
-  if (app == NULL || out_payload == NULL || out_payload_len == NULL) {
+static bool collect_isotp_response(QueueHandle_t rx_queue, twai_node_handle_t node_hdl, uint32_t fc_dest_id,
+                                   const char* label, uint8_t* out_payload, size_t out_payload_cap,
+                                   size_t* out_payload_len) {
+  if (out_payload == NULL || out_payload_len == NULL) {
     return false;
   }
 
-  can_rx_frame_t vdc_first = {0};
-  bool got_vdc_frame = false;
+  // Wait for first response frame, skipping any stray FC frames
+  can_rx_frame_t first = {0};
+  bool got_first = false;
   while (1) {
-    if (xQueueReceive(app->vdc_can_frames, &vdc_first, pdMS_TO_TICKS(200)) != pdTRUE) {
-      ESP_LOGE(TAG, "Didn't receive response from VDC");
+    if (xQueueReceive(rx_queue, &first, pdMS_TO_TICKS(200)) != pdTRUE) {
+      ESP_LOGE(TAG, "Didn't receive response from %s", label);
       break;
     }
-    if ((vdc_first.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-      ESP_LOGW(TAG, "Skipping FC frame while waiting for VDC response");
+    if ((first.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      ESP_LOGW(TAG, "Skipping FC frame while waiting for %s response", label);
       continue;
     }
-    got_vdc_frame = true;
+    got_first = true;
     break;
   }
-  if (!got_vdc_frame) {
+  if (!got_first) {
     return false;
   }
 
-  if ((vdc_first.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
-    isotp_send_flow_control(app->node_hdl, VDC_REQ_ID);
+  // Send FC if responder started a multi-frame response
+  if ((first.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
+    isotp_send_flow_control(node_hdl, fc_dest_id);
   }
 
-  if ((vdc_first.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
-    *out_payload_len = vdc_first.data[0] & 0x0F;
-    memcpy(out_payload, &vdc_first.data[1], *out_payload_len);
+  // Single frame — extract payload directly
+  if ((first.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
+    *out_payload_len = first.data[0] & 0x0F;
+    memcpy(out_payload, &first.data[1], *out_payload_len);
     return true;
   }
 
-  if ((vdc_first.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-    ESP_LOGW(TAG, "Unexpected FC frame when assembling VDC response");
-    return false;
-  }
-
-  size_t expected_len = ((vdc_first.data[0] & 0x0F) << 8) | vdc_first.data[1];
-  can_rx_frame_t vdc_frames[16] = {0};
+  // Multi-frame — collect consecutive frames and unwrap
+  size_t expected_len = ((first.data[0] & 0x0F) << 8) | first.data[1];
+  can_rx_frame_t frames[16] = {0};
   uint8_t frame_idx = 0;
-  vdc_frames[frame_idx++] = vdc_first;
+  frames[frame_idx++] = first;
 
   size_t remaining = (expected_len > 6) ? (expected_len - 6) : 0;
   uint8_t expected_cfs = (uint8_t)((remaining + 6) / 7);
   uint8_t expected_frames = (uint8_t)(1 + expected_cfs);
-  const uint8_t max_frames = 16;
 
-  while (frame_idx < expected_frames && frame_idx < max_frames) {
-    can_rx_frame_t vdc_frame = {0};
-    if (xQueueReceive(app->vdc_can_frames, &vdc_frame, pdMS_TO_TICKS(200)) != pdTRUE) {
-      ESP_LOGE(TAG, "Timeout waiting for VDC response frames (%u/%u)", (unsigned)frame_idx, (unsigned)expected_frames);
+  while (frame_idx < expected_frames && frame_idx < 16) {
+    can_rx_frame_t frame = {0};
+    if (xQueueReceive(rx_queue, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
+      ESP_LOGE(TAG, "Timeout waiting for %s response frames (%u/%u)", label, (unsigned)frame_idx,
+               (unsigned)expected_frames);
       break;
     }
-    if ((vdc_frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-      ESP_LOGW(TAG, "Skipping FC frame during VDC response collection");
+    if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
+      ESP_LOGW(TAG, "Skipping FC frame during %s response collection", label);
       continue;
     }
-    vdc_frames[frame_idx++] = vdc_frame;
+    frames[frame_idx++] = frame;
   }
 
-  if (!isotp_unwrap_frames(vdc_frames, frame_idx, out_payload, out_payload_cap, out_payload_len)) {
-    ESP_LOGE(TAG, "Failed to unwrap ISO-TP frames from VDC");
+  if (!isotp_unwrap_frames(frames, frame_idx, out_payload, out_payload_cap, out_payload_len)) {
+    ESP_LOGE(TAG, "Failed to unwrap ISO-TP frames from %s", label);
     return false;
   }
 
@@ -176,67 +176,12 @@ void task_canbus_data(void* arg) {
       }
     }
 
-    // 5) wait for first ECU response frame, skipping FC frames
-    can_rx_frame_t frame = {0};
-    bool got_response_frame = false;
-    while (1) {
-      if (xQueueReceive(app->ecu_can_frames, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
-        ESP_LOGE(TAG, "Didn't receive response from ECU");
-        break;
-      }
-      if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-        ESP_LOGW(TAG, "Skipping FC frame while waiting for ECU response");
-        continue;
-      }
-      got_response_frame = true;
-      break;
-    }
-    if (!got_response_frame) {
-      continue;
-    }
-
-    // 6) send FC response back to ECU if ECU started a multi-frame response
-    if ((frame.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
-      isotp_send_flow_control(app->node_hdl, ECU_REQ_ID);
-    }
-
-    // 7) assemble full payload
+    // 5-7) collect and assemble ECU response
     uint8_t assembled_payload[128] = {0};
     size_t assembled_len = 0;
-    if ((frame.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
-      assembled_len = frame.data[0] & 0x0F;
-      memcpy(assembled_payload, &frame.data[1], assembled_len);
-    } else if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-      ESP_LOGW(TAG, "Unexpected FC frame when assembling ECU response");
+    if (!collect_isotp_response(app->ecu_can_frames, app->node_hdl, ECU_REQ_ID, "ECU", assembled_payload,
+                                sizeof(assembled_payload), &assembled_len)) {
       continue;
-    } else {
-      size_t expected_len = ((frame.data[0] & 0x0F) << 8) | frame.data[1];
-
-      can_rx_frame_t frames[16] = {0};
-      uint8_t frame_idx = 0;
-      frames[frame_idx++] = frame;
-
-      size_t remaining = (expected_len > 6) ? (expected_len - 6) : 0;
-      uint8_t expected_cfs = (uint8_t)((remaining + 6) / 7);
-      uint8_t expected_frames = (uint8_t)(1 + expected_cfs);
-      const uint8_t max_frames = 16;
-      while (frame_idx < expected_frames && frame_idx < max_frames) {
-        if (xQueueReceive(app->ecu_can_frames, &frame, pdMS_TO_TICKS(200)) != pdTRUE) {
-          ESP_LOGE(TAG, "Timeout waiting for ECU response frames (%u/%u)", (unsigned)frame_idx,
-                   (unsigned)expected_frames);
-          break;
-        }
-        if ((frame.data[0] & 0xF0) == ISOTP_FLOW_CONTROL_FRAME) {
-          ESP_LOGW(TAG, "Skipping FC frame during ECU response collection");
-          continue;
-        }
-        frames[frame_idx++] = frame;
-      }
-
-      if (!isotp_unwrap_frames(frames, frame_idx, assembled_payload, sizeof(assembled_payload), &assembled_len)) {
-        ESP_LOGE(TAG, "Failed to unwrap ISO-TP frames from ECU");
-        continue;
-      }
     }
 
     // 8) parse and apply state updates
@@ -267,7 +212,8 @@ void task_canbus_data(void* arg) {
     size_t vdc_payload_len = 0;
 
     request_vdc_send(app->node_hdl);
-    if (!collect_vdc_response_payload(app, vdc_payload, sizeof(vdc_payload), &vdc_payload_len)) {
+    if (!collect_isotp_response(app->vdc_can_frames, app->node_hdl, VDC_REQ_ID, "VDC", vdc_payload,
+                                sizeof(vdc_payload), &vdc_payload_len)) {
       continue;
     }
     if (!request_vdc_parse_response(vdc_payload, vdc_payload_len, &brake_pressure_bar, &steering_angle_deg)) {
