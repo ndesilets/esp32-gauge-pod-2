@@ -89,10 +89,10 @@ void evaluate_statuses(monitored_state_t* m_state, unsigned int engine_rpm) {
     }
   }
 
-  if (m_state->inj_duty.current_value > 90) {
-    m_state->inj_duty.status = STATUS_WARN;
-  } else if (m_state->inj_duty.current_value >= 100) {
+  if (m_state->inj_duty.current_value >= 100) {
     m_state->inj_duty.status = STATUS_CRITICAL;
+  } else if (m_state->inj_duty.current_value > 90) {
+    m_state->inj_duty.status = STATUS_WARN;
   } else {
     m_state->inj_duty.status = STATUS_OK;
   }
