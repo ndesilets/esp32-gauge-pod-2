@@ -68,8 +68,6 @@ void task_uart_emitter(void* arg) {
     uint8_t cbor_buffer[128];  // base msg size is 56 bytes
     size_t encoded_size = 0;
     encode_display_packet(&state_copy, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
-    cbor_buffer[encoded_size] = '\0';
-
     uart_write_bytes(DH_UART_PORT, cbor_buffer, encoded_size);
   }
 }
