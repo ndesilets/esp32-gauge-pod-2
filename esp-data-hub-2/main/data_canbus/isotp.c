@@ -108,9 +108,6 @@ bool isotp_wrap_payload(const uint8_t* payload, uint16_t payload_len, uint8_t fr
     offset += chunk;
     frame_idx++;
     seq = (seq + 1) & 0x0F;
-    if (seq == 0) {
-      seq = 1;
-    }
   }
 
   *out_frame_count = frame_idx;
@@ -163,9 +160,6 @@ bool isotp_unwrap_frames(const can_rx_frame_t frames[16], size_t frame_count, ui
       offset += chunk;
 
       expected_seq = (expected_seq + 1) & 0x0F;
-      if (expected_seq == 0) {
-        expected_seq = 1;
-      }
     }
 
     if (offset != payload_len) {
