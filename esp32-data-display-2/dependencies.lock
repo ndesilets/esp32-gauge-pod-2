@@ -88,7 +88,7 @@ dependencies:
       type: service
     version: 1.2.0~1
   espressif/esp_lvgl_port:
-    component_hash: f872401524cb645ee6ff1c9242d44fb4ddcfd4d37d7be8b9ed3f4e85a404efcd
+    component_hash: b6360960f47b6776462e7092861b3ea66477ffb762a01baa0aecbb3d74cd50f4
     dependencies:
     - name: idf
       require: private
@@ -100,7 +100,36 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 2.7.0
+    version: 2.7.2
+  espressif/esp_tinyusb:
+    component_hash: 6a50305bc61c7a361da8c0833642be824e92dacb0a6001719a832a4e96e471bf
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    - name: espressif/tinyusb
+      registry_url: https://components.espressif.com
+      require: public
+      version: '>=0.14.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.6~2
+  espressif/tinyusb:
+    component_hash: 5ea9d3b6d6b0734a0a0b3491967aa0e1bece2974132294dbda5dd2839b247bfa
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - esp32h4
+    version: 0.19.0~2
   idf:
     source:
       type: idf
@@ -116,12 +145,12 @@ dependencies:
       type: service
     version: 1.20.3
   lvgl/lvgl:
-    component_hash: 17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
+    component_hash: 184e532558c1c45fefed631f3e235423d22582aafb4630f3e8885c35281a49ae
     dependencies: []
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 9.4.0
+    version: 9.5.0
   waveshare/esp32_p4_wifi6_touch_lcd_4b:
     component_hash: 2e8736e067e25de7b93e9105ee69eefba8d0868876a5dcd94af0839f9ce9994b
     dependencies:
@@ -174,10 +203,11 @@ direct_dependencies:
 - chmorgan/esp-audio-player
 - chmorgan/esp-file-iterator
 - espressif/cbor
+- espressif/esp_tinyusb
 - idf
 - joltwallet/littlefs
 - lvgl/lvgl
 - waveshare/esp32_p4_wifi6_touch_lcd_4b
-manifest_hash: 0441f77b2680db1eb5c0fa2c3f7f90992fa40ac9ca43b0f5add4f9d3a8bde56b
+manifest_hash: 44f9aae39cfe823a8b75ef7cced4b733fb27961de0f9423b29ee3eeeca244734
 target: esp32p4
 version: 2.0.0

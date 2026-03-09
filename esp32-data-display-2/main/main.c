@@ -15,6 +15,7 @@
 #include "sdkconfig.h"
 #include "uart_pipeline_task.h"
 #include "ui_controller.h"
+#include "usb_drive.h"
 
 static const char* TAG = "app";
 
@@ -45,11 +46,6 @@ void app_main(void) {
       .mutex = m_state_mutex,
   };
 
-  esp_err_t logger_init_err = dd_logger_init(&m_state, m_state_mutex);
-  if (logger_init_err != ESP_OK) {
-    ESP_LOGW(TAG, "Logger init failed, SD logging unavailable: %s", esp_err_to_name(logger_init_err));
-  }
-
 #ifndef CONFIG_DD_ENABLE_FAKE_DATA
   uart_config_t uart_config = {
       .baud_rate = 115200,
@@ -79,6 +75,17 @@ void app_main(void) {
                            }};
   bsp_display_start_with_config(&cfg);
   bsp_display_backlight_on();
+
+  // LDO channel 4 is now powered by the display BSP. Safe to init SD + USB MSC.
+  esp_err_t usb_err = dd_usb_drive_init();
+  if (usb_err != ESP_OK) {
+    ESP_LOGW(TAG, "USB drive init failed: %s", esp_err_to_name(usb_err));
+  }
+
+  esp_err_t logger_init_err = dd_logger_init(&m_state, m_state_mutex);
+  if (logger_init_err != ESP_OK) {
+    ESP_LOGW(TAG, "Logger init failed, SD logging unavailable: %s", esp_err_to_name(logger_init_err));
+  }
 
   esp_vfs_littlefs_conf_t littlefs_conf = {
       .base_path = "/storage", .partition_label = NULL, .format_if_mount_failed = true};

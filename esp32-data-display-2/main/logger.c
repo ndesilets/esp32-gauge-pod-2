@@ -11,6 +11,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "usb_drive.h"
 
 static const char* TAG = "logger";
 
@@ -168,20 +169,28 @@ esp_err_t dd_logger_init(monitored_state_t* state, SemaphoreHandle_t state_mutex
   s_state_mutex = state_mutex;
   logger_unlock();
 
-  esp_err_t err = bsp_sdcard_mount();
-  if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
+  // SD card is initialized by usb_drive module. Just verify mount point.
+  DIR* dir = opendir(BSP_SD_MOUNT_POINT);
+  if (dir) {
+    closedir(dir);
     s_sd_ready = true;
-    return ESP_OK;
+  } else {
+    ESP_LOGW(TAG, "SD card mount point not accessible");
+    s_sd_ready = false;
   }
 
-  s_sd_ready = false;
-  return err;
+  return ESP_OK;
 }
 
 esp_err_t dd_logger_start(void) {
   logger_lock();
 
   if (!s_sd_ready || !s_state_ptr || !s_state_mutex) {
+    logger_unlock();
+    return ESP_ERR_INVALID_STATE;
+  }
+  if (dd_usb_drive_is_host_connected()) {
+    ESP_LOGW(TAG, "Cannot start logging: USB host is accessing SD card");
     logger_unlock();
     return ESP_ERR_INVALID_STATE;
   }
