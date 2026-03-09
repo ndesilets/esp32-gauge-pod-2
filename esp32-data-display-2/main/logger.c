@@ -1,5 +1,6 @@
 #include "logger.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -50,13 +51,14 @@ static esp_err_t find_next_log_index(uint32_t* out_index) {
   struct dirent* entry = NULL;
   while ((entry = readdir(dir)) != NULL) {
     const char* name = entry->d_name;
-    if (strlen(name) != 13) {
+    if (strlen(name) != 11) {
       continue;
     }
 
     unsigned int parsed_index = 0;
     char trailing = 0;
-    if (sscanf(name, "log%6u.csv%c", &parsed_index, &trailing) == 1) {
+    // note: use all caps with fat32
+    if (sscanf(name, "LOG%4u.CSV%c", &parsed_index, &trailing) == 1) {
       if (parsed_index > max_index) {
         max_index = parsed_index;
       }
@@ -72,7 +74,8 @@ static esp_err_t open_log_file_with_header(void) {
   uint32_t next_index = 0;
   ESP_RETURN_ON_ERROR(find_next_log_index(&next_index), TAG, "Could not find next log index");
 
-  snprintf(s_current_path, sizeof(s_current_path), "%s/log%06u.csv", BSP_SD_MOUNT_POINT, (unsigned int)next_index);
+  // note: use all caps with fat32
+  snprintf(s_current_path, sizeof(s_current_path), "%s/LOG%04u.CSV", BSP_SD_MOUNT_POINT, (unsigned int)next_index);
   s_log_fp = fopen(s_current_path, "w");
   if (!s_log_fp) {
     ESP_LOGE(TAG, "Failed opening log file: %s", s_current_path);
