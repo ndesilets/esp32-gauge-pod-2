@@ -4,6 +4,7 @@
 
 #include "app_context.h"
 #include "esp_log.h"
+#include "esp_twai.h"
 
 static const char* TAG = "task_twai_monitor";
 
@@ -29,6 +30,14 @@ void task_twai_monitor(void* arg) {
         last_status = status;
         last_record = record;
         has_last = true;
+      }
+
+      if (status.state == TWAI_ERROR_BUS_OFF) {
+        ESP_LOGW(TAG, "bus-off detected, initiating recovery");
+        esp_err_t rec_err = twai_node_recover(app->node_hdl);
+        if (rec_err != ESP_OK) {
+          ESP_LOGE(TAG, "twai_node_recover failed: %s", esp_err_to_name(rec_err));
+        }
       }
     } else {
       ESP_LOGW(TAG, "TWAI status read failed");
