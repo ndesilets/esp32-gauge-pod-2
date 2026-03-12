@@ -4,10 +4,11 @@
 
 #include "can_types.h"
 #include "esp_err.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "isotp.h"
 
-void request_vdc_send(twai_node_handle_t node_hdl) {
+bool request_vdc_send(twai_node_handle_t node_hdl) {
   uint8_t uds_req_payload[8] = {0};
   const size_t uds_len = 5;
   uds_req_payload[0] = 0x22;  // read data by identifier
@@ -26,7 +27,12 @@ void request_vdc_send(twai_node_handle_t node_hdl) {
       .buffer = can_frame,
       .buffer_len = 8,
   };
-  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000)));
+  esp_err_t err = twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000));
+  if (err != ESP_OK) {
+    ESP_LOGW("request_vdc", "VDC transmit failed: %s", esp_err_to_name(err));
+    return false;
+  }
+  return true;
 }
 
 bool request_vdc_parse_response(const uint8_t* uds_payload, size_t length, float* out_brake_pressure_bar,

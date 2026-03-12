@@ -43,12 +43,17 @@ bool can_transport_rx_callback(twai_node_handle_t handle, const twai_rx_done_eve
   return (high_task_woken == pdTRUE);
 }
 
-void can_transport_transmit_frame(twai_node_handle_t node_hdl, uint16_t dest, uint8_t* buffer, size_t payload_len) {
+bool can_transport_transmit_frame(twai_node_handle_t node_hdl, uint16_t dest, uint8_t* buffer, size_t payload_len) {
   twai_frame_t frame = {
       .header.id = dest,
       .header.ide = false,
       .buffer = buffer,
       .buffer_len = payload_len,
   };
-  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &frame, pdMS_TO_TICKS(100)));
+  esp_err_t err = twai_node_transmit(node_hdl, &frame, pdMS_TO_TICKS(100));
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "transmit to 0x%03X failed: %s", dest, esp_err_to_name(err));
+    return false;
+  }
+  return true;
 }

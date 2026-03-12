@@ -97,6 +97,22 @@ components include this. It is the canonical definition of what travels over UAR
 | `task_twai_monitor` | hub | tskIDLE+1 | 4 KB |
 | `display_render_task` | display | tskIDLE+1 | 4 KB |
 
+## Error Handling Convention
+
+Transport and communication errors must not crash the application. Any function
+that sends over CAN, UART, I2C, or other physical buses must handle errors by
+logging a warning and returning a failure indicator — never by calling
+`ESP_ERROR_CHECK` (which aborts on failure).
+
+The reasoning: bus errors are transient. The ECU, VDC, or peripheral may not be
+ready at power-on, or may miss a frame under load. An abort causes a hard reset,
+which can compound the problem (e.g. repeated resets drive the CAN bus into
+bus-off state, or leave the ECU's ISO-TP state machine stuck mid-transfer).
+
+**Rule:** Use `ESP_ERROR_CHECK` only for one-time initialization that is
+genuinely unrecoverable (e.g. driver install, mutex creation). For any runtime
+communication path, check the return value and log + retry instead.
+
 ## Alert Thresholds
 
 All thresholds are in `esp32-data-display-2/main/monitoring.c`. Summary:

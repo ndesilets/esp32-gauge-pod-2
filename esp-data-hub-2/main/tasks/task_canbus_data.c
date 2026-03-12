@@ -59,7 +59,9 @@ static bool collect_isotp_response(QueueHandle_t rx_queue, twai_node_handle_t no
 
   // Send FC if responder started a multi-frame response
   if ((first.data[0] & 0xF0) == ISOTP_FIRST_FRAME) {
-    isotp_send_flow_control(node_hdl, fc_dest_id);
+    if (!isotp_send_flow_control(node_hdl, fc_dest_id)) {
+      return false;
+    }
   }
 
   // Single frame — extract payload directly
@@ -136,7 +138,9 @@ void task_canbus_data(void* arg) {
       continue;
     }
 
-    can_transport_transmit_frame(app->node_hdl, ECU_REQ_ID, can_frames[0], 8);
+    if (!can_transport_transmit_frame(app->node_hdl, ECU_REQ_ID, can_frames[0], 8)) {
+      continue;
+    }
 
     // 3) wait for FC if multi-frame
     uint8_t fc_block_size = 0;
@@ -152,7 +156,10 @@ void task_canbus_data(void* arg) {
       bool sent_all_cfs = true;
       uint8_t frames_sent_in_block = 0;
       for (uint8_t i = 1; i < isotp_payload_frame_count; i++) {
-        can_transport_transmit_frame(app->node_hdl, ECU_REQ_ID, can_frames[i], 8);
+        if (!can_transport_transmit_frame(app->node_hdl, ECU_REQ_ID, can_frames[i], 8)) {
+          sent_all_cfs = false;
+          break;
+        }
 
         // Intentional busy-wait: the ECU doesn't like it if you send the rest too quickly,
         // it basically just won't reply at all iirc. But waiting ~250us fixes it
@@ -213,7 +220,9 @@ void task_canbus_data(void* arg) {
     uint8_t vdc_payload[128] = {0};
     size_t vdc_payload_len = 0;
 
-    request_vdc_send(app->node_hdl);
+    if (!request_vdc_send(app->node_hdl)) {
+      continue;
+    }
     if (!collect_isotp_response(app->vdc_can_frames, app->node_hdl, VDC_REQ_ID, "VDC", vdc_payload,
                                 sizeof(vdc_payload), &vdc_payload_len)) {
       continue;

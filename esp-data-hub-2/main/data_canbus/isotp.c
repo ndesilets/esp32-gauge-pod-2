@@ -65,7 +65,7 @@ bool isotp_wait_for_fc(QueueHandle_t queue, TickType_t timeout, uint8_t* out_bs,
   }
 }
 
-void isotp_send_flow_control(twai_node_handle_t node_hdl, uint32_t to) {
+bool isotp_send_flow_control(twai_node_handle_t node_hdl, uint32_t to) {
   uint8_t fc_data[3] = {ISOTP_FLOW_CONTROL_FRAME, 0, 0};  // let 'er eat bud
   twai_frame_t fc_msg = {
       .header.id = to,
@@ -73,7 +73,12 @@ void isotp_send_flow_control(twai_node_handle_t node_hdl, uint32_t to) {
       .buffer = fc_data,
       .buffer_len = sizeof(fc_data),
   };
-  ESP_ERROR_CHECK(twai_node_transmit(node_hdl, &fc_msg, pdMS_TO_TICKS(100)));
+  esp_err_t err = twai_node_transmit(node_hdl, &fc_msg, pdMS_TO_TICKS(100));
+  if (err != ESP_OK) {
+    ESP_LOGW("isotp", "FC transmit to 0x%03X failed: %s", to, esp_err_to_name(err));
+    return false;
+  }
+  return true;
 }
 
 bool isotp_wrap_payload(const uint8_t* payload, uint16_t payload_len, uint8_t frames[][8], size_t max_frames,

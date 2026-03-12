@@ -21,7 +21,7 @@
 
 void isotp_wait_stmin(uint8_t stmin_raw);
 bool isotp_wait_for_fc(QueueHandle_t queue, TickType_t timeout, uint8_t* out_bs, uint8_t* out_stmin, const char* tag);
-void isotp_send_flow_control(twai_node_handle_t node_hdl, uint32_t to);
+bool isotp_send_flow_control(twai_node_handle_t node_hdl, uint32_t to);
 bool isotp_wrap_payload(const uint8_t* payload, uint16_t payload_len, uint8_t frames[][8], size_t max_frames,
                         size_t* out_frame_count);
 bool isotp_unwrap_frames(const can_rx_frame_t frames[16], size_t frame_count, uint8_t* out_payload,
