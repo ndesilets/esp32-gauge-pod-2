@@ -65,8 +65,10 @@ bool get_data(display_packet_t* packet) {
 }
 #else
 #include "cbor.h"
+#include "cobs.h"
 #include "driver/uart.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 static const char* TAG = "car_data";
 static const size_t DISPLAY_PACKET_CBOR_ITEMS = 14;
@@ -151,20 +153,35 @@ bool get_data(display_packet_t* packet) {
     return false;
   }
 
-  uint8_t payload[CONFIG_DD_UART_BUFFER_SIZE];
-  int payload_len = 0;
+  // Accumulate bytes until the 0x00 COBS frame delimiter. At 115200 baud a
+  // full frame (~60 encoded bytes) arrives in under 6ms, so a 10ms per-byte
+  // timeout lets us bail quickly when no data is available while still giving
+  // the UART enough time to deliver a complete frame once it starts arriving.
+  // Max COBS frame for a 128-byte CBOR payload is 129 bytes.
+  uint8_t cobs_buf[132];
+  size_t cobs_len = 0;
+  bool got_delim = false;
 
-  ESP_ERROR_CHECK(uart_get_buffered_data_len(UART_NUM_1, (size_t*)&payload_len));
-  if (payload_len <= 0) {
+  for (size_t i = 0; i < sizeof(cobs_buf); i++) {
+    uint8_t b;
+    if (uart_read_bytes(UART_NUM_1, &b, 1, pdMS_TO_TICKS(10)) != 1) {
+      break;  // timeout — no more data arriving
+    }
+    if (b == 0x00) {
+      got_delim = true;
+      break;
+    }
+    cobs_buf[cobs_len++] = b;
+  }
+
+  if (!got_delim || cobs_len == 0) {
     return false;
   }
 
-  if (payload_len > CONFIG_DD_UART_BUFFER_SIZE) {
-    payload_len = CONFIG_DD_UART_BUFFER_SIZE;
-  }
-
-  payload_len = uart_read_bytes(UART_NUM_1, payload, payload_len, 100);
-  if (payload_len <= 0) {
+  uint8_t payload[128];
+  size_t payload_len = 0;
+  if (!cobs_decode(cobs_buf, cobs_len, payload, sizeof(payload), &payload_len)) {
+    ESP_LOGW(TAG, "COBS decode failed (len=%u)", (unsigned)cobs_len);
     return false;
   }
 
@@ -172,8 +189,6 @@ bool get_data(display_packet_t* packet) {
     ESP_LOGW(TAG, "could not decode packet");
     return false;
   }
-
-  // ESP_LOGI(TAG, "got packet: sequence=%d timestamp_ms=%d", packet->sequence, packet->timestamp_ms);
 
   return true;
 }

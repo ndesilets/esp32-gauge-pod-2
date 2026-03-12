@@ -2,6 +2,7 @@
 
 #include "app_context.h"
 #include "cbor.h"
+#include "cobs.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
@@ -68,6 +69,14 @@ void task_uart_emitter(void* arg) {
     uint8_t cbor_buffer[128];  // base msg size is 56 bytes
     size_t encoded_size = 0;
     encode_display_packet(&state_copy, cbor_buffer, sizeof(cbor_buffer), &encoded_size);
-    uart_write_bytes(DH_UART_PORT, cbor_buffer, encoded_size);
+    if (encoded_size > 0) {
+      // COBS-encode the CBOR payload, then write the 0x00 frame delimiter.
+      // For a 128-byte input COBS adds at most 1 overhead byte, so 130 bytes
+      // covers the encoded frame + delimiter with room to spare.
+      uint8_t cobs_buf[130];
+      size_t cobs_len = cobs_encode(cbor_buffer, encoded_size, cobs_buf);
+      cobs_buf[cobs_len] = 0x00;  // frame delimiter
+      uart_write_bytes(DH_UART_PORT, cobs_buf, cobs_len + 1);
+    }
   }
 }
