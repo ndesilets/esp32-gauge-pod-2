@@ -19,14 +19,33 @@ static TaskHandle_t s_uart_task = NULL;
 static void uart_pipeline_task(void* arg) {
   monitored_state_t prev_state = {0};
   bool prev_state_valid = false;
+  TickType_t last_packet_tick = xTaskGetTickCount();
+  TickType_t last_resync_tick = 0;
+  bool telemetry_stale_logged = false;
 
   for (;;) {
     display_packet_t packet = {0};
     bool received = get_data(&packet);
     if (!received) {
+#ifndef CONFIG_DD_ENABLE_FAKE_DATA
+      TickType_t now = xTaskGetTickCount();
+      if ((now - last_packet_tick) >= pdMS_TO_TICKS(2000)) {
+        if (!telemetry_stale_logged) {
+          ESP_LOGW(TAG, "No valid UART telemetry for 2000ms, attempting resync");
+          telemetry_stale_logged = true;
+        }
+        if ((now - last_resync_tick) >= pdMS_TO_TICKS(500)) {
+          dd_car_data_uart_resync();
+          last_resync_tick = now;
+        }
+      }
+#endif
       vTaskDelay(pdMS_TO_TICKS(10));
       continue;
     }
+
+    last_packet_tick = xTaskGetTickCount();
+    telemetry_stale_logged = false;
 
     bool alert_transition = false;
     if (xSemaphoreTake(s_state_iface.mutex, pdMS_TO_TICKS(100))) {
