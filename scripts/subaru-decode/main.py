@@ -182,6 +182,24 @@ class ProcessedECUAddr(TypedDict):
     name: str
     unit: str
 
+
+def format_ecu_addresses(addresses: list[int]) -> str:
+    if len(addresses) == 1:
+        return f"{addresses[0]:#08x}"
+
+    return f"{addresses[0]:#08x}-{addresses[-1]:#08x}"
+
+
+def format_field_name(name: str, address_label: str) -> str:
+    if name:
+        return f"{name} ({address_label})"
+
+    return address_label
+
+
+def format_uds_address(addr: int) -> str:
+    return f"{addr:#06x}"
+
 # - functions
 
 def ssm_parse_list_request(message: ProcessedMsg) -> SSMRequest:
@@ -256,9 +274,9 @@ def process_ssm_message(address_lookup: Dict[int, AddressInfo], message: Process
                         addresses = []
                         j = 0
                         while j < ref["length"]:
-                            addresses.append(ssm_response["payload"][i + j])
+                            addresses.append(addr + j)
                             j += 1
-                        raw_bytes = bytes(addresses)
+                        raw_bytes = bytes(ssm_response["payload"][i:i + ref["length"]])
                         float_value = struct.unpack(">f", raw_bytes)[0]
 
                         final_value = eval(ref["value"]["expr"], globals=None, locals={"x": float_value})
@@ -383,9 +401,7 @@ def process_messages_to_dataframe(isotp_messages: list[ProcessedMsg]):
                     fields = dict(
                         map(
                             lambda x: (
-                                x["name"] 
-                                    if x["name"] 
-                                    else "".join(f"{addr:#08x}" for addr in x["addresses"]),
+                                format_field_name(x["name"], format_ecu_addresses(x["addresses"])),
                                 x["value"] if x["name"] else hex(int(x["value"]))
                             ), 
                             ecu_response    
@@ -397,8 +413,12 @@ def process_messages_to_dataframe(isotp_messages: list[ProcessedMsg]):
             case ModuleID.ABS_VDC_REQ | ModuleID.ABS_VDC_RES:
                 abs_vcs_response = process_uds_message(address_lookup["abs_vdc"], message)
                 if abs_vcs_response:
+                    field_name = format_field_name(
+                        abs_vcs_response["name"],
+                        format_uds_address(abs_vcs_response["requested_id"]),
+                    )
                     fields = {
-                        abs_vcs_response["name"] if abs_vcs_response["name"] else hex(abs_vcs_response["requested_id"]): 
+                        field_name:
                         abs_vcs_response["value"] if abs_vcs_response["name"] else hex(abs_vcs_response["value"])
                     }
                     frame = {"timestamp": message["timestamp"], **fields}
