@@ -1,24 +1,24 @@
 ecu:
   # --- adapted from romraider
-  0x000008: 
+  0x000008:
     name: Coolant Temperature
     length: 1
     value:
       unit: F
       expr: 32+9*(x-40)/5
-  0x000009: 
+  0x000009:
     name: "A/F Correction #1"
     length: 1
     value:
       unit: "%"
       expr: (x-128)*100/128
-  0x00000a: 
+  0x00000a:
     name: "A/F Learning #1"
     length: 1
     value:
       unit: "%"
       expr: (x-128)*100/128
-  0x00000e: 
+  0x00000e:
     name: "Engine Speed"
     length: 2
     value:
@@ -67,7 +67,7 @@ ecu:
       unit: µs
       expr: x*256
   0x000029:
-    name: Accelerator Pedal Angle
+    name: Accelerator Pedal
     length: 1
     value:
       unit: "%"
@@ -93,12 +93,12 @@ ecu:
       unit: psi
       expr: x*0.01933677
       # raw value is in mmHg
-#  0xff6b1e:
-#    name: "Final Fueling Base" # or Primary Open Loop Map Enrichment
-#    length: 1
-#    value:
-#      unit: multiplier
-#      expr: x*.0625
+  #  0xff6b1e:
+  #    name: "Final Fueling Base" # or Primary Open Loop Map Enrichment
+  #    length: 1
+  #    value:
+  #      unit: multiplier
+  #      expr: x*.0625
   0xff6b49:
     name: "DAM"
     length: 1
@@ -106,31 +106,38 @@ ecu:
       unit: multiplier
       expr: x*.0625
   0xff8480:
-    name: "Fuel Injector #1 Pulse Width"
-    length: 2
-    value:
-      unit: ms 
-      expr: x*.008
-  0xff8482:
-    name: "Fuel Injector #2 Pulse Width"
-    length: 2
-    value:
-      unit: ms
-      expr: x*.008
-  0xff851c:
-    name: "DAM Multiplier"
-    length: 4
-    type: float
-    value:
-      unit: multiplier 
-      expr: x
-  0xff8810:
     name: "Knock Correction Advance"
     length: 4
     type: float
     value:
       unit: multiplier
       expr: x
+  # 0xff8480:
+  #   name: "Fuel Injector #1 Pulse Width"
+  #   length: 2
+  #   value:
+  #     unit: ms
+  #    expr: x*.008
+  # 0xff8482:
+  #   name: "Fuel Injector #2 Pulse Width"
+  #   length: 2
+  #   value:
+  #     unit: ms
+  #     expr: x*.008
+  0xff851c:
+    name: "Fine Knock Learn"
+    length: 4
+    type: float
+    value:
+      unit: multiplier
+      expr: x
+  # 0xff8810:
+  #   name: "Knock Correction Advance"
+  #   length: 4
+  #   type: float
+  #   value:
+  #     unit: multiplier
+  #     expr: x
   # --- custom bs
   # TODO
 
