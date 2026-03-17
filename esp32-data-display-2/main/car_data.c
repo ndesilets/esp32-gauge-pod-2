@@ -1,6 +1,7 @@
 #include "car_data.h"
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "esp_timer.h"
 #include "math.h"
@@ -63,6 +64,8 @@ bool get_data(display_packet_t* packet) {
 
   return true;
 }
+
+void dd_car_data_uart_resync(void) {}
 #else
 #include "cbor.h"
 #include "cobs.h"
@@ -72,6 +75,36 @@ bool get_data(display_packet_t* packet) {
 
 static const char* TAG = "car_data";
 static const size_t DISPLAY_PACKET_CBOR_ITEMS = 14;
+static const TickType_t UART_PARTIAL_FRAME_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
+
+static uint8_t s_uart_rx_buf[CONFIG_DD_UART_BUFFER_SIZE];
+static size_t s_uart_rx_len = 0;
+static TickType_t s_uart_last_rx_tick = 0;
+
+static void drop_consumed_bytes(size_t consumed) {
+  if (consumed >= s_uart_rx_len) {
+    s_uart_rx_len = 0;
+    return;
+  }
+
+  memmove(s_uart_rx_buf, s_uart_rx_buf + consumed, s_uart_rx_len - consumed);
+  s_uart_rx_len -= consumed;
+}
+
+static int find_frame_delimiter(void) {
+  for (size_t i = 0; i < s_uart_rx_len; i++) {
+    if (s_uart_rx_buf[i] == 0x00) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+void dd_car_data_uart_resync(void) {
+  uart_flush_input(UART_NUM_1);
+  s_uart_rx_len = 0;
+  s_uart_last_rx_tick = xTaskGetTickCount();
+}
 
 static bool decode_telemetry_packet(const uint8_t* payload, size_t length, display_packet_t* packet) {
   CborParser parser;
@@ -153,43 +186,57 @@ bool get_data(display_packet_t* packet) {
     return false;
   }
 
-  // Accumulate bytes until the 0x00 COBS frame delimiter. At 115200 baud a
-  // full frame (~60 encoded bytes) arrives in under 6ms, so a 10ms per-byte
-  // timeout lets us bail quickly when no data is available while still giving
-  // the UART enough time to deliver a complete frame once it starts arriving.
-  // Max COBS frame for a 128-byte CBOR payload is 129 bytes.
-  uint8_t cobs_buf[132];
-  size_t cobs_len = 0;
-  bool got_delim = false;
-
-  for (size_t i = 0; i < sizeof(cobs_buf); i++) {
-    uint8_t b;
-    if (uart_read_bytes(UART_NUM_1, &b, 1, pdMS_TO_TICKS(10)) != 1) {
-      break;  // timeout — no more data arriving
+  int bytes_read = 0;
+  if (s_uart_rx_len < sizeof(s_uart_rx_buf)) {
+    bytes_read = uart_read_bytes(UART_NUM_1, s_uart_rx_buf + s_uart_rx_len, sizeof(s_uart_rx_buf) - s_uart_rx_len,
+                                 pdMS_TO_TICKS(10));
+    if (bytes_read > 0) {
+      s_uart_rx_len += (size_t)bytes_read;
+      s_uart_last_rx_tick = xTaskGetTickCount();
     }
-    if (b == 0x00) {
-      got_delim = true;
+  }
+
+  while (1) {
+    int delimiter_idx = find_frame_delimiter();
+    if (delimiter_idx < 0) {
       break;
     }
-    cobs_buf[cobs_len++] = b;
+
+    const size_t frame_len = (size_t)delimiter_idx;
+    if (frame_len == 0) {
+      drop_consumed_bytes(1);
+      continue;
+    }
+
+    uint8_t payload[128];
+    size_t payload_len = 0;
+    bool decoded = false;
+    if (!cobs_decode(s_uart_rx_buf, frame_len, payload, sizeof(payload), &payload_len)) {
+      ESP_LOGW(TAG, "COBS decode failed (len=%u)", (unsigned)frame_len);
+    } else if (!decode_telemetry_packet(payload, payload_len, packet)) {
+      ESP_LOGW(TAG, "could not decode packet");
+    } else {
+      decoded = true;
+    }
+
+    drop_consumed_bytes(frame_len + 1);
+    if (decoded) {
+      return true;
+    }
   }
 
-  if (!got_delim || cobs_len == 0) {
+  if (s_uart_rx_len >= sizeof(s_uart_rx_buf)) {
+    ESP_LOGW(TAG, "UART RX buffer filled without frame delimiter, forcing resync");
+    dd_car_data_uart_resync();
     return false;
   }
 
-  uint8_t payload[128];
-  size_t payload_len = 0;
-  if (!cobs_decode(cobs_buf, cobs_len, payload, sizeof(payload), &payload_len)) {
-    ESP_LOGW(TAG, "COBS decode failed (len=%u)", (unsigned)cobs_len);
-    return false;
+  if (s_uart_rx_len > 0 && s_uart_last_rx_tick != 0 &&
+      (xTaskGetTickCount() - s_uart_last_rx_tick) >= UART_PARTIAL_FRAME_TIMEOUT_TICKS) {
+    ESP_LOGW(TAG, "discarding stalled partial UART frame (%u bytes)", (unsigned)s_uart_rx_len);
+    s_uart_rx_len = 0;
   }
 
-  if (!decode_telemetry_packet(payload, payload_len, packet)) {
-    ESP_LOGW(TAG, "could not decode packet");
-    return false;
-  }
-
-  return true;
+  return false;
 }
 #endif

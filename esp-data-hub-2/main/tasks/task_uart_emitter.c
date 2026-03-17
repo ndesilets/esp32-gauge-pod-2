@@ -5,6 +5,7 @@
 #include "cobs.h"
 #include "driver/uart.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "sdkconfig.h"
 
 static const char* TAG = "task_uart_emitter";
@@ -65,6 +66,8 @@ void task_uart_emitter(void* arg) {
       ESP_LOGW(TAG, "failed to take display_state_mutex");
       continue;
     }
+
+    state_copy.timestamp_ms = (uint32_t)(esp_timer_get_time() / 1000);
 
     uint8_t cbor_buffer[128];  // base msg size is 56 bytes
     size_t encoded_size = 0;
