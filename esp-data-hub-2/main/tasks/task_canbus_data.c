@@ -29,6 +29,7 @@ void update_display_state(const request_ecu_response_t* response, display_packet
   state->af_ratio = response->af_ratio;
   state->dam = response->dam;
   state->fb_knock = response->fb_knock;
+  state->inj_duty = response->inj_duty;
 }
 
 static bool collect_isotp_response(QueueHandle_t rx_queue, twai_node_handle_t node_hdl, uint32_t fc_dest_id,

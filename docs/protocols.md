@@ -55,16 +55,18 @@ ECU polling uses service 0xA8 (read memory by address list) defined in
 0x00 0x00 0x0E        engine RPM (high byte)
 0x00 0x00 0x0F        engine RPM (low byte)
 0x00 0x00 0x12        intake air temp
+0x00 0x00 0x20        fuel injector #1 pulse width
 0x00 0x00 0x46        AFR
 0xFF 0x6B 0x49        DAM
-0xFF 0x88 0x10        feedback knock correction (byte 0)
-0xFF 0x88 0x11        feedback knock correction (byte 1)
-0xFF 0x88 0x12        feedback knock correction (byte 2)
-0xFF 0x88 0x13        feedback knock correction (byte 3)
-0x00 0x00 0x29        accelerator pedal angle
+0xFF 0x84 0x80        feedback knock correction (byte 0)
+0xFF 0x84 0x81        feedback knock correction (byte 1)
+0xFF 0x84 0x82        feedback knock correction (byte 2)
+0xFF 0x84 0x83        feedback knock correction (byte 3)
+0x00 0x00 0x29        accelerator pedal
 ```
 
-Note: injector duty cycle (TODO) and ethanol concentration (TODO) are not yet polled.
+Note: ethanol concentration is still TODO. Injector duty cycle is now derived from
+injector #1 pulse width with `IDC = injector_pw_ms * RPM / 1200`.
 
 ### Response Parsing (from 0x7E8)
 
@@ -77,10 +79,11 @@ Response payload begins with service ID 0xE8. Bytes after that:
 | data[2] | af_learned | `(value - 128) * 100 / 128` → % |
 | data[3:4] | engine_rpm | `(high << 8 | low) / 4` → RPM |
 | data[5] | int_temp | `32 + 9 * (value - 40) / 5` → °F |
-| data[6] | af_ratio | `value * 14.7 / 128` → λ ratio |
-| data[7] | dam | `value * 0.0625` → 0..1.049 |
-| data[8:11] | fb_knock | `memcpy float` from 4 bytes big-endian → dB |
-| data[12] | throttle_pos | `value * 100 / 255` → % (bt_packet only) |
+| data[6] | inj_duty | `(value * 0.256 ms) * RPM / 1200` → % |
+| data[7] | af_ratio | `value * 14.7 / 128` → λ ratio |
+| data[8] | dam | `value * 0.0625` → 0..1.049 |
+| data[9:12] | fb_knock | `memcpy float` from 4 bytes big-endian |
+| data[13] | throttle_pos | `value * 100 / 255` → % (bt_packet only) |
 
 VDC parsing: `esp-data-hub-2/main/data_canbus/request_vdc.c` — produces
 `brake_pressure_bar` and `steering_angle_deg`.
@@ -109,7 +112,7 @@ Index  Type    Field
   8    float   int_temp        (°F)
   9    float   fb_knock        (dB)
  10    float   af_correct      (%)
- 11    float   inj_duty        (%, currently 0 — not yet polled)
+ 11    float   inj_duty        (%)
  12    float   eth_conc        (%, currently 0 — not yet polled)
  13    float   engine_rpm      (RPM)
 ```
