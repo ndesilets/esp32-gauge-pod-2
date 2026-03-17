@@ -28,6 +28,8 @@ static inline float ssm_ecu_parse_injector_duty(float injector_pw_ms, float engi
   return injector_pw_ms * engine_rpm / 1200.0f;
 }
 
+static inline float ssm_ecu_parse_ethanol_concentration(uint16_t value) { return (float)value * 100.0f / 65536.0f; }
+
 static inline float ssm_ecu_parse_throttle_pos(uint8_t value) { return ((float)value) * 100.0f / 255.0f; }
 
 static inline float ssm_ecu_parse_feedback_knock(uint32_t value) {
@@ -57,8 +59,9 @@ size_t request_ecu_build_poll_payload(uint8_t* out_payload, size_t out_capacity)
       0xFF, 0x84, 0x81,  // feedback knock correction
       0xFF, 0x84, 0x82,  // feedback knock correction
       0xFF, 0x84, 0x83,  // feedback knock correction
+      0xFF, 0x1E, 0xE4,  // ethanol concentration
+      0xFF, 0x1E, 0xE5,  // ethanol concentration
       0x00, 0x00, 0x29,  // accelerator pedal
-      // TODO ethanol concentration
   };
   // clang-format on
 
@@ -76,7 +79,7 @@ bool request_ecu_parse_ssm_response(const uint8_t* ssm_payload, size_t length, r
   }
 
   // SSM response payload starts with service id (0xE8).
-  if (length < 15 || ssm_payload[0] != 0xE8) {
+  if (length < 17 || ssm_payload[0] != 0xE8) {
     return false;
   }
 
@@ -92,7 +95,8 @@ bool request_ecu_parse_ssm_response(const uint8_t* ssm_payload, size_t length, r
   response->dam = ssm_ecu_parse_dam(data[8]);
   response->fb_knock =
       ssm_ecu_parse_feedback_knock((uint32_t)(data[9] << 24 | data[10] << 16 | data[11] << 8 | data[12]));
-  response->throttle_pos = ssm_ecu_parse_throttle_pos(data[13]);
+  response->eth_conc = ssm_ecu_parse_ethanol_concentration((uint16_t)((data[13] << 8) | data[14]));
+  response->throttle_pos = ssm_ecu_parse_throttle_pos(data[15]);
 
   return true;
 }

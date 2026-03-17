@@ -62,11 +62,13 @@ ECU polling uses service 0xA8 (read memory by address list) defined in
 0xFF 0x84 0x81        feedback knock correction (byte 1)
 0xFF 0x84 0x82        feedback knock correction (byte 2)
 0xFF 0x84 0x83        feedback knock correction (byte 3)
+0xFF 0x1E 0xE4        ethanol concentration (byte 0)
+0xFF 0x1E 0xE5        ethanol concentration (byte 1)
 0x00 0x00 0x29        accelerator pedal
 ```
 
-Note: ethanol concentration is still TODO. Injector duty cycle is now derived from
-injector #1 pulse width with `IDC = injector_pw_ms * RPM / 1200`.
+Injector duty cycle is derived from injector #1 pulse width with
+`IDC = injector_pw_ms * RPM / 1200`.
 
 ### Response Parsing (from 0x7E8)
 
@@ -83,7 +85,8 @@ Response payload begins with service ID 0xE8. Bytes after that:
 | data[7] | af_ratio | `value * 14.7 / 128` → λ ratio |
 | data[8] | dam | `value * 0.0625` → 0..1.049 |
 | data[9:12] | fb_knock | `memcpy float` from 4 bytes big-endian |
-| data[13] | throttle_pos | `value * 100 / 255` → % (bt_packet only) |
+| data[13:14] | eth_conc | `(high << 8 | low) * 100 / 65536` → % |
+| data[15] | throttle_pos | `value * 100 / 255` → % (bt_packet only) |
 
 VDC parsing: `esp-data-hub-2/main/data_canbus/request_vdc.c` — produces
 `brake_pressure_bar` and `steering_angle_deg`.
@@ -113,7 +116,7 @@ Index  Type    Field
   9    float   fb_knock        (dB)
  10    float   af_correct      (%)
  11    float   inj_duty        (%)
- 12    float   eth_conc        (%, currently 0 — not yet polled)
+ 12    float   eth_conc        (%)
  13    float   engine_rpm      (RPM)
 ```
 

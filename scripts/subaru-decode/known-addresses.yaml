@@ -85,6 +85,12 @@ ecu:
       unit: AFR
       expr: x/128*14.7
   # TODO: verify these addresses
+  0xff1ee4:
+    name: "Ethanol Concentration"
+    length: 2
+    value:
+      unit: "%"
+      expr: x*100/65536
   0xff63d4:
     name: "Boost"
     length: 4
