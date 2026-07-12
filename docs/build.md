@@ -85,7 +85,8 @@ additional gauges.
 | `CONFIG_DH_UART_TX_GPIO` | 17 | UART TX GPIO |
 | `CONFIG_DH_UART_RX_GPIO` | 18 | UART RX GPIO |
 | `CONFIG_DH_UART_EMIT_PERIOD_MS` | 33 | Packet emit interval (ms) |
-| `CONFIG_DH_CAR_POLL_PERIOD_MS` | 63 | ECU/VDC poll interval (ms) |
+| `CONFIG_DH_ECU_POLL_PERIOD_MS` | 63 | ECU SSM poll interval (ms) |
+| `CONFIG_DH_VDC_POLL_PERIOD_MS` | 63 | VDC UDS poll interval (ms) |
 | `CONFIG_DH_ANALOG_POLL_PERIOD_MS` | 20 | Analog sensor poll interval (ms) |
 | `CONFIG_DH_ANALOG_USE_MOCK` | n | Enable mock analog backend |
 | `CONFIG_DH_ANALOG_I2C_SDA_GPIO` | 4 | ADS1115 SDA |

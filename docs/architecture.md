@@ -11,22 +11,24 @@ logs data to an SD card.
 ┌────────────────────────────────────────────────────┐
 │              esp-data-hub-2 (ESP32)                │
 │                                                    │
-│  task_canbus_data (prio+1)                         │
+│  task_ecu_ssm (prio+1)                            │
 │    Send ECU poll (0x7E0) via ISO-TP                │
 │    Receive ECU response (0x7E8) via ISO-TP         │
-│    Parse SSM response → display_state              │
+│    Parse SSM response → vehicle_state              │
+│                                                    │
+│  task_vdc_uds (prio+1)                            │
 │    Send VDC poll (0x7B0) via ISO-TP                │
-│    Parse VDC response → display_state              │
+│    Parse VDC response → vehicle_state              │
 │                                                    │
 │  task_analog_sensors (prio+1)                      │
 │    Read ADS1115 (I2C) → oil temp + oil pressure    │
-│    → display_state                                 │
+│    → vehicle_state                                 │
 │                                                    │
 │  task_can_rx_dispatcher (prio+2)                   │
 │    Route CAN frames → ecu_can_frames / vdc_can_frames │
 │                                                    │
 │  task_uart_emitter (prio+1)                        │
-│    Copy display_state (under mutex)                │
+│    Copy vehicle_state (under mutex)                │
 │    MessagePack → CRC16 → COBS → 0x00               │
 │    TX over UART at 115200 baud                     │
 └──────────────────────────┬─────────────────────────┘
@@ -37,7 +39,7 @@ logs data to an SD card.
 │                                                    │
 │  uart_pipeline_task (prio+2)                       │
 │    RX UART packet                                  │
-│    COBS + CRC16 validation → display_packet_t      │
+│    COBS + CRC16 validation → vehicle_state_t       │
 │    Update monitored_state (under mutex)            │
 │    evaluate_statuses() → status per field          │
 │    Detect alert transitions → play audio           │
@@ -63,10 +65,10 @@ Owns all vehicle data acquisition. Responsibilities:
 - ISO-TP framing/deframing for multi-byte ECU/VDC responses
 - SSM (Subaru Select Monitor) request construction and response parsing
 - Analog sensor reading via ADS1115 over I2C (oil temp, oil pressure)
-- Packing `display_packet_t` and emitting framed MessagePack over UART
+- Maintaining mutex-protected `vehicle_state_t` and emitting it as framed MessagePack over UART
 
 Central state is `app_context_t` in `main/app_context.h`. All tasks receive a
-pointer to this; shared fields are protected by their respective mutexes.
+pointer to this; `vehicle_state` is protected by `vehicle_state_mutex`.
 
 ### esp32-data-display-2
 
@@ -92,7 +94,8 @@ CRC16 validation, and COBS framing used by both firmware projects.
 |---|---|---|---|
 | `task_can_rx_dispatcher` | hub | tskIDLE+2 | 8 KB |
 | `uart_pipeline_task` | display | tskIDLE+2 | 4 KB |
-| `task_canbus_data` | hub | tskIDLE+1 | 16 KB |
+| `task_ecu_ssm` | hub | tskIDLE+1 | 16 KB |
+| `task_vdc_uds` | hub | tskIDLE+1 | 8 KB |
 | `task_analog_sensors` | hub | tskIDLE+1 | 8 KB |
 | `task_uart_emitter` | hub | tskIDLE+1 | 8 KB |
 | `task_twai_monitor` | hub | tskIDLE+1 | 4 KB |

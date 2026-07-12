@@ -44,7 +44,7 @@ protocol documentation together. See [`docs/protocols.md`](docs/protocols.md).
 
 **Thread safety via mutex.** Both components protect shared state with
 `SemaphoreHandle_t` mutexes. Always take the mutex before reading or writing
-`display_state` / `bt_state` (hub) or `monitored_state_t` (display). Release
+`vehicle_state` (hub) or `monitored_state_t` (display). Release
 promptly — render and pipeline tasks run at different priorities.
 
 **Mock and fake data.** Use these sdkconfig options to test without hardware:
@@ -55,7 +55,7 @@ promptly — render and pipeline tasks run at different priorities.
 
 | File | Why it matters |
 |---|---|
-| `esp32-shared/include/telemetry_types.h` | Defines `display_packet_t` and `bt_packet_t` — the wire format |
+| `esp32-shared/include/telemetry_types.h` | Defines `vehicle_state_t` — the wire format and shared vehicle state |
 | `esp32-shared/src/telemetry_protocol.c` | Owns MessagePack, CRC16, and COBS encoding/decoding |
 | `esp-data-hub-2/main/tasks/task_uart_emitter.c` | Snapshots state and emits shared-codec UART frames |
 | `esp32-data-display-2/main/car_data.c` | Accumulates UART bytes and passes complete frames to the shared codec |
