@@ -88,7 +88,7 @@ static esp_err_t open_log_file_with_header(void) {
   if (fprintf(s_log_fp,
               "timestamp_s,water_temp,oil_temp,oil_pressure,oil_pressure_raw,dam,af_learned,af_ratio,int_temp,"
               "fb_knock,af_correct,"
-              "inj_duty,eth_conc\n") < 0) {
+              "inj_duty,eth_conc,throttle_pos,brake_pressure_bar,steering_angle_deg\n") < 0) {
     fclose(s_log_fp);
     s_log_fp = NULL;
     ESP_LOGE(TAG, "Failed writing CSV header");
@@ -101,13 +101,16 @@ static esp_err_t open_log_file_with_header(void) {
 
 static bool write_snapshot_row(FILE* fp, const monitored_state_t* snapshot) {
   double timestamp_s = (double)(esp_timer_get_time() - s_session_start_us) / 1000000.0;
-  int rc = fprintf(fp, "%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n", timestamp_s,
+  int rc = fprintf(fp,
+                   "%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
+                   timestamp_s,
                    snapshot->water_temp.current_value, snapshot->oil_temp.current_value,
                    snapshot->oil_pressure.current_value, snapshot->oil_pressure_raw, snapshot->dam.current_value,
                    snapshot->af_learned.current_value, snapshot->af_ratio.current_value,
                    snapshot->int_temp.current_value, snapshot->fb_knock.current_value,
                    snapshot->af_correct.current_value, snapshot->inj_duty.current_value,
-                   snapshot->eth_conc.current_value);
+                   snapshot->eth_conc.current_value, snapshot->throttle_pos, snapshot->brake_pressure_bar,
+                   snapshot->steering_angle_deg);
   return (rc >= 0);
 }
 

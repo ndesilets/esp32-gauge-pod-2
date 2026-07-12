@@ -61,6 +61,9 @@ bool get_data(vehicle_state_t* packet) {
 
       // supplemental
       .engine_rpm = 2500.0f,
+      .throttle_pos = map_sine_to_range(sinf(i / 35.0f), 0.0f, 100.0f),
+      .brake_pressure_bar = map_sine_to_range(sinf(i / 60.0f), 0.0f, 80.0f),
+      .steering_angle_deg = map_sine_to_range(sinf(i / 45.0f), -180.0f, 180.0f),
   };
 
   i++;

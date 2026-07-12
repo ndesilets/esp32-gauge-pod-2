@@ -19,6 +19,9 @@ typedef struct {
   numeric_monitor_t oil_temp;
   numeric_monitor_t oil_pressure;
   float oil_pressure_raw;
+  float throttle_pos;
+  float brake_pressure_bar;
+  float steering_angle_deg;
 
   numeric_monitor_t dam;
   numeric_monitor_t af_learned;
