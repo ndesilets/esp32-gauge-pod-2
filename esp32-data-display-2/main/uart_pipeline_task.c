@@ -52,6 +52,7 @@ static void uart_pipeline_task(void* arg) {
       update_numeric_monitor(&s_state_iface.state->water_temp, packet.water_temp);
       update_numeric_monitor(&s_state_iface.state->oil_temp, packet.oil_temp);
       update_numeric_monitor(&s_state_iface.state->oil_pressure, packet.oil_pressure);
+      s_state_iface.state->oil_pressure_raw = packet.oil_pressure_raw;
 
       update_numeric_monitor(&s_state_iface.state->dam, packet.dam);
       update_numeric_monitor(&s_state_iface.state->af_learned, packet.af_learned);

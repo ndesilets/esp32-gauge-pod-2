@@ -18,6 +18,7 @@ typedef struct {
   numeric_monitor_t water_temp;
   numeric_monitor_t oil_temp;
   numeric_monitor_t oil_pressure;
+  float oil_pressure_raw;
 
   numeric_monitor_t dam;
   numeric_monitor_t af_learned;

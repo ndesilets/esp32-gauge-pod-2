@@ -35,6 +35,8 @@ bool get_data(vehicle_state_t* packet) {
   }
 
   static int i = 0;
+  const float filtered_oil_pressure = map_sine_to_range(sinf(i / 50.0f), 10.0f, 90.0f);
+  const float raw_oil_pressure = filtered_oil_pressure + 5.0f * sinf(i * 1.7f);
 
   *packet = (vehicle_state_t){
       // metadata
@@ -44,7 +46,8 @@ bool get_data(vehicle_state_t* packet) {
       // primary
       // .water_temp = wrap_range(i / 4, 190, 240),
       .oil_temp = wrap_range(i / 10, 200, 300),
-      // .oil_pressure = wrap_range(i / 4, 0, 100),
+      .oil_pressure = filtered_oil_pressure,
+      .oil_pressure_raw = raw_oil_pressure,
 
       // .dam = map_sine_to_range(sinf(i / 50.0f), 0, 1.049),
       // .af_learned = map_sine_to_range(sinf(i / 50.0f), -10, 10),
