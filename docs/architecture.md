@@ -3,7 +3,7 @@
 ## System Overview
 
 Two ESP32 boards communicate over UART. The data hub polls the car's ECU and ABS
-module over CAN bus, reads analog sensors via I2C, and emits periodic CBOR packets.
+module over CAN bus, reads analog sensors via I2C, and emits framed MessagePack packets.
 The display receives those packets, evaluates thresholds, renders an LVGL UI, and
 logs data to an SD card.
 
@@ -27,17 +27,17 @@ logs data to an SD card.
 │                                                    │
 │  task_uart_emitter (prio+1)                        │
 │    Copy display_state (under mutex)                │
-│    CBOR encode → 14-field array                    │
+│    MessagePack → CRC16 → COBS → 0x00               │
 │    TX over UART at 115200 baud                     │
 └──────────────────────────┬─────────────────────────┘
-                           │ UART (115200 baud, CBOR)
+                           │ UART (115200 baud, framed MessagePack)
                            ▼
 ┌────────────────────────────────────────────────────┐
 │           esp32-data-display-2 (ESP32-P4)          │
 │                                                    │
 │  uart_pipeline_task (prio+2)                       │
 │    RX UART packet                                  │
-│    CBOR decode → display_packet_t                  │
+│    COBS + CRC16 validation → display_packet_t      │
 │    Update monitored_state (under mutex)            │
 │    evaluate_statuses() → status per field          │
 │    Detect alert transitions → play audio           │
@@ -63,7 +63,7 @@ Owns all vehicle data acquisition. Responsibilities:
 - ISO-TP framing/deframing for multi-byte ECU/VDC responses
 - SSM (Subaru Select Monitor) request construction and response parsing
 - Analog sensor reading via ADS1115 over I2C (oil temp, oil pressure)
-- Packing `display_packet_t` and emitting over UART as CBOR
+- Packing `display_packet_t` and emitting framed MessagePack over UART
 
 Central state is `app_context_t` in `main/app_context.h`. All tasks receive a
 pointer to this; shared fields are protected by their respective mutexes.
@@ -71,7 +71,7 @@ pointer to this; shared fields are protected by their respective mutexes.
 ### esp32-data-display-2
 
 Owns all UI and monitoring. Responsibilities:
-- UART receive and CBOR decode
+- UART receive, frame validation, and MessagePack decode
 - Threshold evaluation and alert status per field
 - LVGL rendering at 30 fps
 - SD card logging via FATFS
@@ -82,8 +82,9 @@ Central state is `monitored_state_t` in `main/monitoring.h`. Fields are
 
 ### esp32-shared
 
-Single header `telemetry_types.h` defining the wire format structs. Both firmware
-components include this. It is the canonical definition of what travels over UART.
+Shared ESP-IDF component defining packet types and the complete UART wire codec.
+`telemetry_protocol.c` is the single implementation of MessagePack serialization,
+CRC16 validation, and COBS framing used by both firmware projects.
 
 ## Task Priority Summary
 

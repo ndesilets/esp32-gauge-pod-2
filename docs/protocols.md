@@ -94,32 +94,52 @@ VDC parsing: `esp-data-hub-2/main/data_canbus/request_vdc.c` — produces
 ## UART Telemetry (Hub → Display)
 
 - Baud: 115200, 8N1
-- Encoding: CBOR binary (tinycbor library)
-- Packet size: ~56 bytes typical
+- Payload: MessagePack fixed array (MPack v1.1.1)
+- Integrity: CRC-16/CCITT-FALSE over the MessagePack payload
+- Framing: COBS with a trailing `0x00` delimiter
+- Maximum wire frame: 76 bytes, including delimiter
 
-### CBOR Field Order (MUST stay in sync)
+### Wire framing
 
-Encoder: `esp-data-hub-2/main/tasks/task_uart_emitter.c::encode_display_packet()`
-Decoder: `esp32-data-display-2/main/car_data.c::decode_telemetry_packet()`
-
-```
-Index  Type    Field
-  0    uint    sequence
-  1    uint    timestamp_ms
-  2    float   water_temp      (°F)
-  3    float   oil_temp        (°F)
-  4    float   oil_pressure    (PSI)
-  5    float   dam             (0..1.049)
-  6    float   af_learned      (%)
-  7    float   af_ratio        (λ, e.g. 14.7)
-  8    float   int_temp        (°F)
-  9    float   fb_knock        (dB)
- 10    float   af_correct      (%)
- 11    float   inj_duty        (%)
- 12    float   eth_conc        (%)
- 13    float   engine_rpm      (RPM)
+```text
+MessagePack payload
+→ append CRC16 high byte, then low byte
+→ COBS encode payload + CRC
+→ append 0x00
 ```
 
-**Adding a new field:** add it to `display_packet_t`, bump the array count from 14
-to N in both encoder and decoder, add the field at the end of both encode/decode
-sequences, and update this table.
+CRC parameters are polynomial `0x1021`, initial value `0xFFFF`, final XOR
+`0x0000`, no input/output reflection. The check value for ASCII `123456789` is
+`0x29B1`. The receiver validates COBS and CRC before parsing MessagePack.
+
+The shared implementation is `esp32-shared/src/telemetry_protocol.c`; the hub
+and display do not maintain separate codecs.
+
+### MessagePack Field Order (MUST stay in sync)
+
+```
+Index  Type      Field
+  0    uint      schema_version (currently 1)
+  1    uint32    sequence
+  2    uint32    timestamp_ms
+  3    float32   water_temp      (°F)
+  4    float32   oil_temp        (°F)
+  5    float32   oil_pressure    (PSI)
+  6    float32   dam             (0..1.049)
+  7    float32   af_learned      (%)
+  8    float32   af_ratio        (λ, e.g. 14.7)
+  9    float32   int_temp        (°F)
+ 10    float32   fb_knock        (dB)
+ 11    float32   af_correct      (%)
+ 12    float32   inj_duty        (%)
+ 13    float32   eth_conc        (%)
+ 14    float32   engine_rpm      (RPM)
+```
+
+The decoder requires exactly 15 items, exact `float32` telemetry values, unsigned
+integers fitting `uint32_t`, the supported schema version, and no trailing data.
+
+**Adding a new field:** add it to `display_packet_t`, append it to both sequences
+in the shared codec, update the item count and maximum sizes, bump the schema
+version, update the golden test vector, and update this table. Both devices must
+be flashed together when the schema changes.
