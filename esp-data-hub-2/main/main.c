@@ -37,6 +37,10 @@ void app_main(void) {
   };
   twai_node_handle_t node_hdl = NULL;
   ESP_ERROR_CHECK(twai_new_node_onchip(&node_config, &node_hdl));
+  if (!can_transport_init()) {
+    ESP_LOGE(TAG, "Failed to initialize CAN transport");
+    return;
+  }
 
   static app_context_t app = {0};
   if (!app_context_init(&app, node_hdl)) {
@@ -45,6 +49,7 @@ void app_main(void) {
   }
 
   twai_event_callbacks_t twai_cbs = {
+      .on_tx_done = can_transport_tx_done_callback,
       .on_rx_done = can_transport_rx_callback,
   };
   ESP_ERROR_CHECK(twai_node_register_event_callbacks(node_hdl, &twai_cbs, &app));

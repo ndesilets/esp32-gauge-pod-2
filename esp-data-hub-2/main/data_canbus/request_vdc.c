@@ -2,10 +2,7 @@
 
 #include <string.h>
 
-#include "can_types.h"
-#include "esp_err.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
+#include "can_transport.h"
 #include "isotp.h"
 
 bool request_vdc_send(twai_node_handle_t node_hdl) {
@@ -21,18 +18,7 @@ bool request_vdc_send(twai_node_handle_t node_hdl) {
   can_frame[0] = ISOTP_SINGLE_FRAME | (uint8_t)(uds_len & 0x0F);
   memcpy(&can_frame[1], &uds_req_payload[0], uds_len);
 
-  twai_frame_t msg = {
-      .header.id = VDC_REQ_ID,
-      .header.ide = false,
-      .buffer = can_frame,
-      .buffer_len = 8,
-  };
-  esp_err_t err = twai_node_transmit(node_hdl, &msg, pdMS_TO_TICKS(1000));
-  if (err != ESP_OK) {
-    ESP_LOGW("request_vdc", "VDC transmit failed: %s", esp_err_to_name(err));
-    return false;
-  }
-  return true;
+  return can_transport_transmit_frame(node_hdl, VDC_REQ_ID, can_frame, sizeof(can_frame));
 }
 
 bool request_vdc_parse_response(const uint8_t* uds_payload, size_t length, float* out_brake_pressure_bar,
