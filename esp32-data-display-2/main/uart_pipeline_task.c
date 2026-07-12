@@ -24,7 +24,7 @@ static void uart_pipeline_task(void* arg) {
   bool telemetry_stale_logged = false;
 
   for (;;) {
-    display_packet_t packet = {0};
+    vehicle_state_t packet = {0};
     bool received = get_data(&packet);
     if (!received) {
 #ifndef CONFIG_DD_ENABLE_FAKE_DATA

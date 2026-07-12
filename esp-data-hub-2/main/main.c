@@ -18,9 +18,10 @@
 #include "sdkconfig.h"
 #include "tasks/task_analog_sensors.h"
 #include "tasks/task_can_rx_dispatcher.h"
-#include "tasks/task_canbus_data.h"
+#include "tasks/task_ecu_ssm.h"
 #include "tasks/task_twai_monitor.h"
 #include "tasks/task_uart_emitter.h"
+#include "tasks/task_vdc_uds.h"
 
 static const char* TAG = "app_main";
 #define DH_UART_PORT ((uart_port_t)CONFIG_DH_UART_PORT)
@@ -32,7 +33,7 @@ void app_main(void) {
       .io_cfg.tx = CONFIG_DH_TWAI_TX_GPIO,
       .io_cfg.rx = CONFIG_DH_TWAI_RX_GPIO,
       .bit_timing.bitrate = 500000,
-      .tx_queue_depth = 1,  // 8 should be plenty for ecu responses (largest one)
+      .tx_queue_depth = 8,
   };
   twai_node_handle_t node_hdl = NULL;
   ESP_ERROR_CHECK(twai_new_node_onchip(&node_config, &node_hdl));
@@ -68,7 +69,14 @@ void app_main(void) {
                                       &uart_queue, intr_alloc_flags));
 #endif
 
-  xTaskCreate(task_canbus_data, "task_canbus_data", 8192 * 2, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
+  if (xTaskCreate(task_ecu_ssm, "task_ecu_ssm", 8192 * 2, (void*)&app, tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
+    ESP_LOGE(TAG, "Failed to create ECU SSM task");
+    return;
+  }
+  if (xTaskCreate(task_vdc_uds, "task_vdc_uds", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
+    ESP_LOGE(TAG, "Failed to create VDC UDS task");
+    return;
+  }
   xTaskCreate(task_can_rx_dispatcher, "task_can_rx_dispatcher", 8192, (void*)&app, tskIDLE_PRIORITY + 2, NULL);
   xTaskCreate(task_analog_sensors, "task_analog_sensors", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
   xTaskCreate(task_twai_monitor, "task_twai_monitor", 4096, (void*)&app, tskIDLE_PRIORITY + 1, NULL);

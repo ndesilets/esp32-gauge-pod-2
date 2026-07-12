@@ -23,15 +23,7 @@ typedef struct {
 
   // supplemental
   float engine_rpm;
-} display_packet_t;
-
-typedef struct {
-  // metadata
-  uint32_t sequence;
-  uint32_t timestamp_ms;
-
   float throttle_pos;
   float brake_pressure_bar;
   float steering_angle_deg;
-  float engine_rpm;
-} bt_packet_t;
+} vehicle_state_t;

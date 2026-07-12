@@ -7,10 +7,10 @@
 #include "cobs.h"
 #include "telemetry_protocol.h"
 
-static void assert_packet_equal(const display_packet_t* expected, const display_packet_t* actual) {
+static void assert_packet_equal(const vehicle_state_t* expected, const vehicle_state_t* actual) {
   assert(expected->sequence == actual->sequence);
   assert(expected->timestamp_ms == actual->timestamp_ms);
-  assert(memcmp(&expected->water_temp, &actual->water_temp, sizeof(float) * 12) == 0);
+  assert(memcmp(&expected->water_temp, &actual->water_temp, sizeof(float) * 15) == 0);
 }
 
 static size_t rebuild_frame(uint8_t* raw, size_t raw_length, uint8_t* frame) {
@@ -26,7 +26,7 @@ static void test_crc_check_value(void) {
 }
 
 static void test_round_trip(void) {
-  const display_packet_t input = {
+  const vehicle_state_t input = {
       .sequence = UINT32_MAX,
       .timestamp_ms = 0x12345678U,
       .water_temp = 212.5f,
@@ -41,6 +41,9 @@ static void test_round_trip(void) {
       .inj_duty = 87.5f,
       .eth_conc = 64.0f,
       .engine_rpm = 6789.5f,
+      .throttle_pos = 82.0f,
+      .brake_pressure_bar = 37.5f,
+      .steering_angle_deg = -12.25f,
   };
 
   uint8_t frame[TELEMETRY_COBS_FRAME_MAX_SIZE];
@@ -48,20 +51,23 @@ static void test_round_trip(void) {
   assert(telemetry_frame_encode(&input, frame, sizeof(frame), &frame_length) == TELEMETRY_RESULT_OK);
   assert(frame_length <= sizeof(frame));
 
-  display_packet_t output = {0};
+  vehicle_state_t output = {0};
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_OK);
   assert_packet_equal(&input, &output);
 }
 
 static void test_golden_messagepack_payload(void) {
-  const display_packet_t input = {
+  const vehicle_state_t input = {
       .sequence = 0x12345678U,
       .timestamp_ms = 0x9ABCDEF0U,
   };
   static const uint8_t expected_payload[] = {
-      0x9F, 0x01,
+      0xDC, 0x00, 0x12, 0x02,
       0xCE, 0x12, 0x34, 0x56, 0x78,
       0xCE, 0x9A, 0xBC, 0xDE, 0xF0,
+      0xCA, 0x00, 0x00, 0x00, 0x00,
+      0xCA, 0x00, 0x00, 0x00, 0x00,
+      0xCA, 0x00, 0x00, 0x00, 0x00,
       0xCA, 0x00, 0x00, 0x00, 0x00,
       0xCA, 0x00, 0x00, 0x00, 0x00,
       0xCA, 0x00, 0x00, 0x00, 0x00,
@@ -91,7 +97,7 @@ static void test_golden_messagepack_payload(void) {
 }
 
 static void test_rejects_corruption_without_modifying_destination(void) {
-  const display_packet_t input = {.sequence = 42, .timestamp_ms = 99, .engine_rpm = 2500.0f};
+  const vehicle_state_t input = {.sequence = 42, .timestamp_ms = 99, .engine_rpm = 2500.0f};
   uint8_t frame[TELEMETRY_COBS_FRAME_MAX_SIZE];
   size_t frame_length = 0;
   assert(telemetry_frame_encode(&input, frame, sizeof(frame), &frame_length) == TELEMETRY_RESULT_OK);
@@ -101,14 +107,14 @@ static void test_rejects_corruption_without_modifying_destination(void) {
   assert(cobs_decode(frame, frame_length, raw, sizeof(raw), &raw_length));
   raw[raw_length / 2] ^= 0x01;
   frame_length = cobs_encode(raw, raw_length, frame);
-  const display_packet_t sentinel = {.sequence = 777, .water_temp = -100.0f};
-  display_packet_t output = sentinel;
+  const vehicle_state_t sentinel = {.sequence = 777, .water_temp = -100.0f};
+  vehicle_state_t output = sentinel;
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_CRC_ERROR);
   assert(memcmp(&sentinel, &output, sizeof(output)) == 0);
 }
 
 static void test_rejects_wrong_schema(void) {
-  const display_packet_t input = {0};
+  const vehicle_state_t input = {0};
   uint8_t frame[TELEMETRY_COBS_FRAME_MAX_SIZE];
   size_t frame_length = 0;
   assert(telemetry_frame_encode(&input, frame, sizeof(frame), &frame_length) == TELEMETRY_RESULT_OK);
@@ -116,15 +122,15 @@ static void test_rejects_wrong_schema(void) {
   uint8_t raw[TELEMETRY_RAW_FRAME_MAX_SIZE];
   size_t raw_length = 0;
   assert(cobs_decode(frame, frame_length, raw, sizeof(raw), &raw_length));
-  raw[1] = TELEMETRY_SCHEMA_VERSION + 1;
+  raw[3] = TELEMETRY_SCHEMA_VERSION + 1;
   frame_length = rebuild_frame(raw, raw_length, frame);
 
-  display_packet_t output = {0};
+  vehicle_state_t output = {0};
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_SCHEMA_ERROR);
 }
 
 static void test_rejects_invalid_messagepack(void) {
-  const display_packet_t input = {0};
+  const vehicle_state_t input = {0};
   uint8_t frame[TELEMETRY_COBS_FRAME_MAX_SIZE];
   size_t frame_length = 0;
   assert(telemetry_frame_encode(&input, frame, sizeof(frame), &frame_length) == TELEMETRY_RESULT_OK);
@@ -133,19 +139,19 @@ static void test_rejects_invalid_messagepack(void) {
   size_t raw_length = 0;
   assert(cobs_decode(frame, frame_length, raw, sizeof(raw), &raw_length));
 
-  raw[0] = 0x9E;  // The protocol requires a 15-item fixarray (0x9F).
+  raw[2] = 0x11;  // The protocol requires an 18-item array.
   frame_length = rebuild_frame(raw, raw_length, frame);
-  display_packet_t output = {0};
+  vehicle_state_t output = {0};
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_MSGPACK_ERROR);
 
-  raw[0] = 0x9F;
-  raw[4] = 0xC0;  // First telemetry field must be float32, not nil.
+  raw[2] = 0x12;
+  raw[6] = 0xC0;  // First telemetry field must be float32, not nil.
   frame_length = rebuild_frame(raw, raw_length, frame);
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_MSGPACK_ERROR);
 }
 
 static void test_rejects_trailing_messagepack_data(void) {
-  const display_packet_t input = {0};
+  const vehicle_state_t input = {0};
   uint8_t frame[TELEMETRY_COBS_FRAME_MAX_SIZE];
   size_t frame_length = 0;
   assert(telemetry_frame_encode(&input, frame, sizeof(frame), &frame_length) == TELEMETRY_RESULT_OK);
@@ -159,22 +165,22 @@ static void test_rejects_trailing_messagepack_data(void) {
   raw_length++;
   frame_length = rebuild_frame(raw, raw_length, frame);
 
-  display_packet_t output = {0};
+  vehicle_state_t output = {0};
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_MSGPACK_ERROR);
 }
 
 static void test_argument_and_size_errors(void) {
-  const display_packet_t input = {0};
+  const vehicle_state_t input = {0};
   uint8_t frame[TELEMETRY_COBS_FRAME_MAX_SIZE];
   size_t frame_length = 123;
   assert(telemetry_frame_encode(&input, frame, sizeof(frame) - 1, &frame_length) ==
          TELEMETRY_RESULT_OUTPUT_TOO_SMALL);
   assert(frame_length == 0);
-  assert(telemetry_frame_decode(frame, sizeof(frame) + 1, (display_packet_t*)&input) ==
+  assert(telemetry_frame_decode(frame, sizeof(frame) + 1, (vehicle_state_t*)&input) ==
          TELEMETRY_RESULT_FRAME_TOO_LARGE);
-  assert(telemetry_frame_decode(NULL, 0, (display_packet_t*)&input) == TELEMETRY_RESULT_INVALID_ARGUMENT);
+  assert(telemetry_frame_decode(NULL, 0, (vehicle_state_t*)&input) == TELEMETRY_RESULT_INVALID_ARGUMENT);
   const uint8_t invalid_cobs[] = {0x00};
-  assert(telemetry_frame_decode(invalid_cobs, sizeof(invalid_cobs), (display_packet_t*)&input) ==
+  assert(telemetry_frame_decode(invalid_cobs, sizeof(invalid_cobs), (vehicle_state_t*)&input) ==
          TELEMETRY_RESULT_COBS_ERROR);
 }
 

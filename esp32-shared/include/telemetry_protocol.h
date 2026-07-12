@@ -9,14 +9,14 @@
 extern "C" {
 #endif
 
-#define TELEMETRY_SCHEMA_VERSION 1U
-#define TELEMETRY_MSGPACK_ITEM_COUNT 15U
+#define TELEMETRY_SCHEMA_VERSION 2U
+#define TELEMETRY_MSGPACK_ITEM_COUNT 18U
 
-// Maximum encoded sizes for the current 15-item schema:
-//   fixarray + version + two uint32 values + twelve float32 values = 72 bytes
+// Maximum encoded sizes for the current 18-item schema:
+//   array16 + version + two uint32 values + fifteen float32 values = 89 bytes
 //   raw frame = MessagePack + two-byte CRC
 //   COBS frame = raw + raw/254 + one code byte
-#define TELEMETRY_MSGPACK_MAX_SIZE 72U
+#define TELEMETRY_MSGPACK_MAX_SIZE 89U
 #define TELEMETRY_RAW_FRAME_MAX_SIZE (TELEMETRY_MSGPACK_MAX_SIZE + 2U)
 #define TELEMETRY_COBS_FRAME_MAX_SIZE \
   (TELEMETRY_RAW_FRAME_MAX_SIZE + (TELEMETRY_RAW_FRAME_MAX_SIZE / 254U) + 1U)
@@ -34,13 +34,13 @@ typedef enum {
 } telemetry_result_t;
 
 // Encodes one complete frame, excluding the trailing 0x00 UART delimiter.
-telemetry_result_t telemetry_frame_encode(const display_packet_t* packet, uint8_t* output,
+telemetry_result_t telemetry_frame_encode(const vehicle_state_t* packet, uint8_t* output,
                                           size_t output_capacity, size_t* output_length);
 
 // Decodes one COBS frame. `frame` must not include the trailing 0x00 delimiter.
 // `packet` is only modified after the entire frame has been validated.
 telemetry_result_t telemetry_frame_decode(const uint8_t* frame, size_t frame_length,
-                                          display_packet_t* packet);
+                                          vehicle_state_t* packet);
 
 // CRC-16/CCITT-FALSE: poly=0x1021, init=0xFFFF, xorout=0x0000, refin=false.
 uint16_t telemetry_crc16_ccitt_false(const uint8_t* data, size_t length);

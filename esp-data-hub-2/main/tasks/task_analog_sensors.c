@@ -41,12 +41,12 @@ void task_analog_sensors(void* arg) {
       continue;
     }
 
-    if (xSemaphoreTake(app->display_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-      app->display_state.oil_temp = reading.oil_temp_f;
-      app->display_state.oil_pressure = reading.oil_pressure_psi;
-      xSemaphoreGive(app->display_state_mutex);
+    if (xSemaphoreTake(app->vehicle_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+      app->vehicle_state.oil_temp = reading.oil_temp_f;
+      app->vehicle_state.oil_pressure = reading.oil_pressure_psi;
+      xSemaphoreGive(app->vehicle_state_mutex);
     } else {
-      ESP_LOGW(TAG, "failed to take display_state_mutex");
+      ESP_LOGW(TAG, "failed to take vehicle_state_mutex");
     }
 
     TickType_t now = xTaskGetTickCount();

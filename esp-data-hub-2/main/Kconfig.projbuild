@@ -83,12 +83,20 @@ endmenu
 
 menu "Car Polling"
 
-config DH_CAR_POLL_PERIOD_MS
-    int "Car data polling period (ms)"
+config DH_ECU_POLL_PERIOD_MS
+    int "ECU SSM polling period (ms)"
     range 1 60000
     default 63
     help
-        Poll period for canbus_data_task request loop in milliseconds.
+        Poll period for the ECU SSM request loop in milliseconds.
+        Example: 5000 = every 5 seconds.
+
+config DH_VDC_POLL_PERIOD_MS
+    int "VDC UDS polling period (ms)"
+    range 1 60000
+    default 63
+    help
+        Poll period for the VDC UDS request loop in milliseconds.
         Example: 5000 = every 5 seconds.
 
 endmenu

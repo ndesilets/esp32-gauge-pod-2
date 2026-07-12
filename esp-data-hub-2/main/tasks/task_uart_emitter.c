@@ -23,13 +23,13 @@ void task_uart_emitter(void* arg) {
   while (1) {
     vTaskDelayUntil(&last_wake, period_ticks);
 
-    display_packet_t state_copy;
-    if (xSemaphoreTake(app->display_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-      state_copy = app->display_state;
-      app->display_state.sequence++;
-      xSemaphoreGive(app->display_state_mutex);
+    vehicle_state_t state_copy;
+    if (xSemaphoreTake(app->vehicle_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+      state_copy = app->vehicle_state;
+      app->vehicle_state.sequence++;
+      xSemaphoreGive(app->vehicle_state_mutex);
     } else {
-      ESP_LOGW(TAG, "failed to take display_state_mutex");
+      ESP_LOGW(TAG, "failed to take vehicle_state_mutex");
       continue;
     }
 

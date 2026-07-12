@@ -4,8 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "telemetry_types.h"
-
 typedef struct {
   // primary
   float water_temp;

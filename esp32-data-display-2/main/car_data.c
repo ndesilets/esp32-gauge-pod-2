@@ -29,14 +29,14 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
   return lo + normalized * (hi - lo);
 }
 
-bool get_data(display_packet_t* packet) {
+bool get_data(vehicle_state_t* packet) {
   if (!packet) {
     return false;
   }
 
   static int i = 0;
 
-  *packet = (display_packet_t){
+  *packet = (vehicle_state_t){
       // metadata
       .sequence = i,
       .timestamp_ms = esp_timer_get_time() / 1000,
@@ -104,7 +104,7 @@ void dd_car_data_uart_resync(void) {
   s_uart_last_rx_tick = xTaskGetTickCount();
 }
 
-bool get_data(display_packet_t* packet) {
+bool get_data(vehicle_state_t* packet) {
   if (!packet) {
     return false;
   }
