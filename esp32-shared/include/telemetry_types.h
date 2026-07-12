@@ -9,7 +9,8 @@ typedef struct {
   // primary
   float water_temp;
   float oil_temp;
-  float oil_pressure;
+  float oil_pressure;      // filtered PSI used by the display and monitoring
+  float oil_pressure_raw;  // calibrated but unfiltered PSI for diagnostics
 
   float dam;
   float af_learned;

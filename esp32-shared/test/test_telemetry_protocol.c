@@ -10,7 +10,7 @@
 static void assert_packet_equal(const vehicle_state_t* expected, const vehicle_state_t* actual) {
   assert(expected->sequence == actual->sequence);
   assert(expected->timestamp_ms == actual->timestamp_ms);
-  assert(memcmp(&expected->water_temp, &actual->water_temp, sizeof(float) * 15) == 0);
+  assert(memcmp(&expected->water_temp, &actual->water_temp, sizeof(float) * 16) == 0);
 }
 
 static size_t rebuild_frame(uint8_t* raw, size_t raw_length, uint8_t* frame) {
@@ -32,6 +32,7 @@ static void test_round_trip(void) {
       .water_temp = 212.5f,
       .oil_temp = 230.25f,
       .oil_pressure = 72.75f,
+      .oil_pressure_raw = 76.125f,
       .dam = 1.0f,
       .af_learned = -3.125f,
       .af_ratio = 14.7f,
@@ -62,9 +63,10 @@ static void test_golden_messagepack_payload(void) {
       .timestamp_ms = 0x9ABCDEF0U,
   };
   static const uint8_t expected_payload[] = {
-      0xDC, 0x00, 0x12, 0x02,
+      0xDC, 0x00, 0x13, 0x03,
       0xCE, 0x12, 0x34, 0x56, 0x78,
       0xCE, 0x9A, 0xBC, 0xDE, 0xF0,
+      0xCA, 0x00, 0x00, 0x00, 0x00,
       0xCA, 0x00, 0x00, 0x00, 0x00,
       0xCA, 0x00, 0x00, 0x00, 0x00,
       0xCA, 0x00, 0x00, 0x00, 0x00,
@@ -139,12 +141,12 @@ static void test_rejects_invalid_messagepack(void) {
   size_t raw_length = 0;
   assert(cobs_decode(frame, frame_length, raw, sizeof(raw), &raw_length));
 
-  raw[2] = 0x11;  // The protocol requires an 18-item array.
+  raw[2] = 0x12;  // The protocol requires a 19-item array.
   frame_length = rebuild_frame(raw, raw_length, frame);
   vehicle_state_t output = {0};
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_MSGPACK_ERROR);
 
-  raw[2] = 0x12;
+  raw[2] = 0x13;
   raw[6] = 0xC0;  // First telemetry field must be float32, not nil.
   frame_length = rebuild_frame(raw, raw_length, frame);
   assert(telemetry_frame_decode(frame, frame_length, &output) == TELEMETRY_RESULT_MSGPACK_ERROR);

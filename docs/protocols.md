@@ -119,7 +119,7 @@ and display do not maintain separate codecs.
 
 ```
 Index  Type      Field
-  0    uint      schema_version (currently 2)
+  0    uint      schema_version (currently 3)
   1    uint32    sequence
   2    uint32    timestamp_ms
   3    float32   water_temp      (°F)
@@ -137,9 +137,14 @@ Index  Type      Field
  15    float32   throttle_pos    (%)
  16    float32   brake_pressure_bar (bar)
  17    float32   steering_angle_deg (degrees)
+ 18    float32   oil_pressure_raw (unfiltered PSI)
 ```
 
-The decoder requires exactly 18 items, exact `float32` telemetry values, unsigned
+`oil_pressure` is the filtered value used by the display and alert monitoring.
+`oil_pressure_raw` is the calibrated but unsmoothed value retained for data
+logging and electrical-noise diagnosis.
+
+The decoder requires exactly 19 items, exact `float32` telemetry values, unsigned
 integers fitting `uint32_t`, the supported schema version, and no trailing data.
 
 **Adding a new field:** add it to `vehicle_state_t`, append it to both sequences

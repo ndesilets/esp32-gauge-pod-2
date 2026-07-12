@@ -29,6 +29,7 @@ static telemetry_result_t encode_msgpack(const vehicle_state_t* packet, uint8_t*
   mpack_write_float(&writer, packet->throttle_pos);
   mpack_write_float(&writer, packet->brake_pressure_bar);
   mpack_write_float(&writer, packet->steering_angle_deg);
+  mpack_write_float(&writer, packet->oil_pressure_raw);
   mpack_finish_array(&writer);
 
   const size_t bytes_written = mpack_writer_buffer_used(&writer);
@@ -66,6 +67,7 @@ static telemetry_result_t decode_msgpack(const uint8_t* payload, size_t payload_
   decoded.throttle_pos = mpack_expect_float_strict(&reader);
   decoded.brake_pressure_bar = mpack_expect_float_strict(&reader);
   decoded.steering_angle_deg = mpack_expect_float_strict(&reader);
+  decoded.oil_pressure_raw = mpack_expect_float_strict(&reader);
   mpack_done_array(&reader);
 
   const size_t trailing_bytes = mpack_reader_remaining(&reader, NULL);

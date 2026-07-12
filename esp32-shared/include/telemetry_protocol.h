@@ -9,14 +9,14 @@
 extern "C" {
 #endif
 
-#define TELEMETRY_SCHEMA_VERSION 2U
-#define TELEMETRY_MSGPACK_ITEM_COUNT 18U
+#define TELEMETRY_SCHEMA_VERSION 3U
+#define TELEMETRY_MSGPACK_ITEM_COUNT 19U
 
-// Maximum encoded sizes for the current 18-item schema:
-//   array16 + version + two uint32 values + fifteen float32 values = 89 bytes
+// Maximum encoded sizes for the current 19-item schema:
+//   array16 + version + two uint32 values + sixteen float32 values = 94 bytes
 //   raw frame = MessagePack + two-byte CRC
 //   COBS frame = raw + raw/254 + one code byte
-#define TELEMETRY_MSGPACK_MAX_SIZE 89U
+#define TELEMETRY_MSGPACK_MAX_SIZE 94U
 #define TELEMETRY_RAW_FRAME_MAX_SIZE (TELEMETRY_MSGPACK_MAX_SIZE + 2U)
 #define TELEMETRY_COBS_FRAME_MAX_SIZE \
   (TELEMETRY_RAW_FRAME_MAX_SIZE + (TELEMETRY_RAW_FRAME_MAX_SIZE / 254U) + 1U)
