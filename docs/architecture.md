@@ -64,7 +64,8 @@ Owns all vehicle data acquisition. Responsibilities:
 - CAN bus communication via ESP-IDF TWAI driver at 500 kbps
 - ISO-TP framing/deframing for multi-byte ECU/VDC responses
 - SSM (Subaru Select Monitor) request construction and response parsing
-- Analog sensor reading via ADS1115 over I2C (oil temp, oil pressure)
+- Analog sensor reading via ADS1115 over I2C (oil temp, raw oil pressure)
+- Median plus adaptive exponential oil-pressure filtering; raw and filtered PSI are retained
 - Maintaining mutex-protected `vehicle_state_t` and emitting it as framed MessagePack over UART
 
 Central state is `app_context_t` in `main/app_context.h`. All tasks receive a

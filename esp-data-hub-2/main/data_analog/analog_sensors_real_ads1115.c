@@ -208,7 +208,7 @@ static esp_err_t real_read(analog_sensor_reading_t* out) {
   const float pressure_psi = analog_interpolate_pressure_psi(pressure_voltage);
 
   out->oil_temp_f = smoothed_temp_f;
-  out->oil_pressure_psi = (float)analog_round_to_i16(pressure_psi);
+  out->oil_pressure_raw_psi = pressure_psi;
   return ESP_OK;
 }
 

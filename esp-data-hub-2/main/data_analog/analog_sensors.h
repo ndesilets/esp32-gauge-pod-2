@@ -4,7 +4,8 @@
 
 typedef struct {
   float oil_temp_f;
-  float oil_pressure_psi;
+  float oil_pressure_raw_psi;
+  float oil_pressure_filtered_psi;
 } analog_sensor_reading_t;
 
 esp_err_t analog_sensors_init(void);

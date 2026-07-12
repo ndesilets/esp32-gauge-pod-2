@@ -91,6 +91,11 @@ additional gauges.
 | `CONFIG_DH_ANALOG_USE_MOCK` | n | Enable mock analog backend |
 | `CONFIG_DH_ANALOG_I2C_SDA_GPIO` | 4 | ADS1115 SDA |
 | `CONFIG_DH_ANALOG_I2C_SCL_GPIO` | 5 | ADS1115 SCL |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_NORMAL_TAU_MS` | 180 | Normal pressure smoothing time constant |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_FAST_TAU_MS` | 22 | Fast pressure response time constant |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_FAST_STEP_PSI` | 8 | Pressure step that activates fast response |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_FAST_HOLD_MS` | 60 | Fast response duration after a large step |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_IMMEDIATE_LOW_PSI` | 3 | Median pressure that bypasses EMA smoothing |
 
 ### Data Display
 

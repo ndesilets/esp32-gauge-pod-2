@@ -38,7 +38,7 @@ static esp_err_t mock_read(analog_sensor_reading_t *out) {
   const float noisy_psi = base_psi + uniform_noise(1.5f);
 
   out->oil_temp_f = smoothed_temp;
-  out->oil_pressure_psi = (float)analog_round_to_i16(noisy_psi);
+  out->oil_pressure_raw_psi = noisy_psi;
   return ESP_OK;
 }
 
