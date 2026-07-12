@@ -29,14 +29,16 @@ float map_sine_to_range(float sine_val, float lo, float hi) {
   return lo + normalized * (hi - lo);
 }
 
-bool get_data(display_packet_t* packet) {
+bool get_data(vehicle_state_t* packet) {
   if (!packet) {
     return false;
   }
 
   static int i = 0;
+  const float filtered_oil_pressure = map_sine_to_range(sinf(i / 50.0f), 10.0f, 90.0f);
+  const float raw_oil_pressure = filtered_oil_pressure + 5.0f * sinf(i * 1.7f);
 
-  *packet = (display_packet_t){
+  *packet = (vehicle_state_t){
       // metadata
       .sequence = i,
       .timestamp_ms = esp_timer_get_time() / 1000,
@@ -44,7 +46,8 @@ bool get_data(display_packet_t* packet) {
       // primary
       // .water_temp = wrap_range(i / 4, 190, 240),
       .oil_temp = wrap_range(i / 10, 200, 300),
-      // .oil_pressure = wrap_range(i / 4, 0, 100),
+      .oil_pressure = filtered_oil_pressure,
+      .oil_pressure_raw = raw_oil_pressure,
 
       // .dam = map_sine_to_range(sinf(i / 50.0f), 0, 1.049),
       // .af_learned = map_sine_to_range(sinf(i / 50.0f), -10, 10),
@@ -58,6 +61,9 @@ bool get_data(display_packet_t* packet) {
 
       // supplemental
       .engine_rpm = 2500.0f,
+      .throttle_pos = map_sine_to_range(sinf(i / 35.0f), 0.0f, 100.0f),
+      .brake_pressure_bar = map_sine_to_range(sinf(i / 60.0f), 0.0f, 80.0f),
+      .steering_angle_deg = map_sine_to_range(sinf(i / 45.0f), -180.0f, 180.0f),
   };
 
   i++;
@@ -67,14 +73,12 @@ bool get_data(display_packet_t* packet) {
 
 void dd_car_data_uart_resync(void) {}
 #else
-#include "cbor.h"
-#include "cobs.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "telemetry_protocol.h"
 
 static const char* TAG = "car_data";
-static const size_t DISPLAY_PACKET_CBOR_ITEMS = 14;
 static const TickType_t UART_PARTIAL_FRAME_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
 
 static uint8_t s_uart_rx_buf[CONFIG_DD_UART_BUFFER_SIZE];
@@ -106,82 +110,7 @@ void dd_car_data_uart_resync(void) {
   s_uart_last_rx_tick = xTaskGetTickCount();
 }
 
-static bool decode_telemetry_packet(const uint8_t* payload, size_t length, display_packet_t* packet) {
-  CborParser parser;
-  CborValue root;
-  CborError err = cbor_parser_init(payload, length, 0, &parser, &root);
-  if (err != CborNoError) {
-    ESP_LOGW(TAG, "CBOR parser init failed (%d)", err);
-    return false;
-  } else if (!cbor_value_is_array(&root)) {
-    ESP_LOGW(TAG, "CBOR root is not an array");
-    return false;
-  }
-
-  size_t array_len = 0;
-  err = cbor_value_get_array_length(&root, &array_len);
-  if (err != CborNoError || array_len != DISPLAY_PACKET_CBOR_ITEMS) {
-    ESP_LOGW(TAG, "CBOR array length invalid: len=%d err=%d", (int)array_len, err);
-    return false;
-  }
-
-  CborValue it;
-  err = cbor_value_enter_container(&root, &it);
-  if (err != CborNoError) {
-    ESP_LOGW(TAG, "CBOR enter failed (%d)", err);
-    return false;
-  }
-
-  CborError field_err = CborNoError;
-#define DECODE_UINT_FIELD(field)                     \
-  do {                                               \
-    uint64_t tmp = 0;                                \
-    field_err |= cbor_value_get_uint64(&it, &tmp);   \
-    if (tmp > UINT32_MAX) {                          \
-      ESP_LOGW(TAG, "CBOR uint overflow for " #field); \
-      return false;                                  \
-    }                                                \
-    packet->field = (uint32_t)tmp;                   \
-    field_err |= cbor_value_advance(&it);            \
-  } while (0)
-
-#define DECODE_FLOAT_FIELD(field)                 \
-  do {                                            \
-    float tmp = 0;                                \
-    field_err |= cbor_value_get_float(&it, &tmp); \
-    packet->field = tmp;                          \
-    field_err |= cbor_value_advance(&it);         \
-  } while (0)
-
-  // Keep this order and type mapping aligned with esp-data-hub task_uart_emitter.c::encode_display_packet().
-  DECODE_UINT_FIELD(sequence);
-  DECODE_UINT_FIELD(timestamp_ms);
-  DECODE_FLOAT_FIELD(water_temp);
-  DECODE_FLOAT_FIELD(oil_temp);
-  DECODE_FLOAT_FIELD(oil_pressure);
-  DECODE_FLOAT_FIELD(dam);
-  DECODE_FLOAT_FIELD(af_learned);
-  DECODE_FLOAT_FIELD(af_ratio);
-  DECODE_FLOAT_FIELD(int_temp);
-  DECODE_FLOAT_FIELD(fb_knock);
-  DECODE_FLOAT_FIELD(af_correct);
-  DECODE_FLOAT_FIELD(inj_duty);
-  DECODE_FLOAT_FIELD(eth_conc);
-  DECODE_FLOAT_FIELD(engine_rpm);
-
-#undef DECODE_UINT_FIELD
-#undef DECODE_FLOAT_FIELD
-
-  field_err |= cbor_value_leave_container(&root, &it);
-  if (field_err != CborNoError) {
-    ESP_LOGW(TAG, "CBOR decode failed (%d)", field_err);
-    return false;
-  }
-
-  return true;
-}
-
-bool get_data(display_packet_t* packet) {
+bool get_data(vehicle_state_t* packet) {
   if (!packet) {
     return false;
   }
@@ -208,15 +137,11 @@ bool get_data(display_packet_t* packet) {
       continue;
     }
 
-    uint8_t payload[128];
-    size_t payload_len = 0;
-    bool decoded = false;
-    if (!cobs_decode(s_uart_rx_buf, frame_len, payload, sizeof(payload), &payload_len)) {
-      ESP_LOGW(TAG, "COBS decode failed (len=%u)", (unsigned)frame_len);
-    } else if (!decode_telemetry_packet(payload, payload_len, packet)) {
-      ESP_LOGW(TAG, "could not decode packet");
-    } else {
-      decoded = true;
+    const telemetry_result_t result = telemetry_frame_decode(s_uart_rx_buf, frame_len, packet);
+    const bool decoded = result == TELEMETRY_RESULT_OK;
+    if (!decoded) {
+      ESP_LOGW(TAG, "telemetry frame rejected: %s (len=%u)", telemetry_result_name(result),
+               (unsigned)frame_len);
     }
 
     drop_consumed_bytes(frame_len + 1);

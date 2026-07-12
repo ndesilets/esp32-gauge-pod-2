@@ -33,16 +33,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.3
-  espressif/cbor:
-    component_hash: dad9ca860963e930366510a10b422b3125a4fb27b979712ed65efcbcd742de50
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.6.1~4
   espressif/cmake_utilities:
     component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
     dependencies:
@@ -202,12 +192,11 @@ dependencies:
 direct_dependencies:
 - chmorgan/esp-audio-player
 - chmorgan/esp-file-iterator
-- espressif/cbor
 - espressif/esp_tinyusb
 - idf
 - joltwallet/littlefs
 - lvgl/lvgl
 - waveshare/esp32_p4_wifi6_touch_lcd_4b
-manifest_hash: 44f9aae39cfe823a8b75ef7cced4b733fb27961de0f9423b29ee3eeeca244734
+manifest_hash: 915e1edb89fd478f734f2b0c3aef8786fe988ceddfdbed0226b698c5bb9a731d
 target: esp32p4
 version: 2.0.0

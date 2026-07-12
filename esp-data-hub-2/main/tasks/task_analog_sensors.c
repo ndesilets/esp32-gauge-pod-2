@@ -41,18 +41,20 @@ void task_analog_sensors(void* arg) {
       continue;
     }
 
-    if (xSemaphoreTake(app->display_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-      app->display_state.oil_temp = reading.oil_temp_f;
-      app->display_state.oil_pressure = reading.oil_pressure_psi;
-      xSemaphoreGive(app->display_state_mutex);
+    if (xSemaphoreTake(app->vehicle_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+      app->vehicle_state.oil_temp = reading.oil_temp_f;
+      app->vehicle_state.oil_pressure = reading.oil_pressure_filtered_psi;
+      app->vehicle_state.oil_pressure_raw = reading.oil_pressure_raw_psi;
+      xSemaphoreGive(app->vehicle_state_mutex);
     } else {
-      ESP_LOGW(TAG, "failed to take display_state_mutex");
+      ESP_LOGW(TAG, "failed to take vehicle_state_mutex");
     }
 
     TickType_t now = xTaskGetTickCount();
     if ((now - last_log_tick) >= pdMS_TO_TICKS(CONFIG_DH_ANALOG_LOG_PERIOD_MS)) {
       last_log_tick = now;
-      // ESP_LOGI(TAG, "analog oil_temp=%.1fF oil_pressure=%.1fpsi", reading.oil_temp_f, reading.oil_pressure_psi);
+      // ESP_LOGI(TAG, "analog oil_temp=%.1fF oil_pressure=%.1fpsi raw=%.1fpsi", reading.oil_temp_f,
+      //          reading.oil_pressure_filtered_psi, reading.oil_pressure_raw_psi);
     }
 
     vTaskDelay(pdMS_TO_TICKS(CONFIG_DH_ANALOG_POLL_PERIOD_MS));

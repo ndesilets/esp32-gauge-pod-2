@@ -24,7 +24,7 @@ static void uart_pipeline_task(void* arg) {
   bool telemetry_stale_logged = false;
 
   for (;;) {
-    display_packet_t packet = {0};
+    vehicle_state_t packet = {0};
     bool received = get_data(&packet);
     if (!received) {
 #ifndef CONFIG_DD_ENABLE_FAKE_DATA
@@ -52,6 +52,10 @@ static void uart_pipeline_task(void* arg) {
       update_numeric_monitor(&s_state_iface.state->water_temp, packet.water_temp);
       update_numeric_monitor(&s_state_iface.state->oil_temp, packet.oil_temp);
       update_numeric_monitor(&s_state_iface.state->oil_pressure, packet.oil_pressure);
+      s_state_iface.state->oil_pressure_raw = packet.oil_pressure_raw;
+      s_state_iface.state->throttle_pos = packet.throttle_pos;
+      s_state_iface.state->brake_pressure_bar = packet.brake_pressure_bar;
+      s_state_iface.state->steering_angle_deg = packet.steering_angle_deg;
 
       update_numeric_monitor(&s_state_iface.state->dam, packet.dam);
       update_numeric_monitor(&s_state_iface.state->af_learned, packet.af_learned);

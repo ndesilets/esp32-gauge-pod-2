@@ -83,12 +83,20 @@ endmenu
 
 menu "Car Polling"
 
-config DH_CAR_POLL_PERIOD_MS
-    int "Car data polling period (ms)"
+config DH_ECU_POLL_PERIOD_MS
+    int "ECU SSM polling period (ms)"
     range 1 60000
     default 63
     help
-        Poll period for canbus_data_task request loop in milliseconds.
+        Poll period for the ECU SSM request loop in milliseconds.
+        Example: 5000 = every 5 seconds.
+
+config DH_VDC_POLL_PERIOD_MS
+    int "VDC UDS polling period (ms)"
+    range 1 60000
+    default 63
+    help
+        Poll period for the VDC UDS request loop in milliseconds.
         Example: 5000 = every 5 seconds.
 
 endmenu
@@ -107,6 +115,41 @@ config DH_ANALOG_POLL_PERIOD_MS
     default 20
     help
         Poll period for analog_data_task sensor reads.
+
+config DH_OIL_PRESSURE_FILTER_NORMAL_TAU_MS
+    int "Oil pressure normal filter time constant (ms)"
+    range 20 2000
+    default 180
+    help
+        Smoothing time constant used for ordinary oil pressure movement and noise.
+
+config DH_OIL_PRESSURE_FILTER_FAST_TAU_MS
+    int "Oil pressure fast filter time constant (ms)"
+    range 1 500
+    default 22
+    help
+        Smoothing time constant used briefly after a large pressure step.
+
+config DH_OIL_PRESSURE_FILTER_FAST_STEP_PSI
+    int "Oil pressure fast-step threshold (PSI)"
+    range 1 50
+    default 8
+    help
+        Difference from the filtered value that activates the fast response.
+
+config DH_OIL_PRESSURE_FILTER_FAST_HOLD_MS
+    int "Oil pressure fast-response duration (ms)"
+    range 0 500
+    default 60
+    help
+        How long to retain fast response after detecting a large pressure step.
+
+config DH_OIL_PRESSURE_FILTER_IMMEDIATE_LOW_PSI
+    int "Oil pressure immediate-low threshold (PSI)"
+    range 0 20
+    default 3
+    help
+        A median pressure at or below this value bypasses exponential smoothing.
 
 config DH_ANALOG_I2C_PORT
     int "Analog I2C port"

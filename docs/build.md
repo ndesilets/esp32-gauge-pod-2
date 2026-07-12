@@ -85,11 +85,17 @@ additional gauges.
 | `CONFIG_DH_UART_TX_GPIO` | 17 | UART TX GPIO |
 | `CONFIG_DH_UART_RX_GPIO` | 18 | UART RX GPIO |
 | `CONFIG_DH_UART_EMIT_PERIOD_MS` | 33 | Packet emit interval (ms) |
-| `CONFIG_DH_CAR_POLL_PERIOD_MS` | 63 | ECU/VDC poll interval (ms) |
+| `CONFIG_DH_ECU_POLL_PERIOD_MS` | 63 | ECU SSM poll interval (ms) |
+| `CONFIG_DH_VDC_POLL_PERIOD_MS` | 63 | VDC UDS poll interval (ms) |
 | `CONFIG_DH_ANALOG_POLL_PERIOD_MS` | 20 | Analog sensor poll interval (ms) |
 | `CONFIG_DH_ANALOG_USE_MOCK` | n | Enable mock analog backend |
 | `CONFIG_DH_ANALOG_I2C_SDA_GPIO` | 4 | ADS1115 SDA |
 | `CONFIG_DH_ANALOG_I2C_SCL_GPIO` | 5 | ADS1115 SCL |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_NORMAL_TAU_MS` | 180 | Normal pressure smoothing time constant |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_FAST_TAU_MS` | 22 | Fast pressure response time constant |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_FAST_STEP_PSI` | 8 | Pressure step that activates fast response |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_FAST_HOLD_MS` | 60 | Fast response duration after a large step |
+| `CONFIG_DH_OIL_PRESSURE_FILTER_IMMEDIATE_LOW_PSI` | 3 | Median pressure that bypasses EMA smoothing |
 
 ### Data Display
 
