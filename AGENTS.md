@@ -6,16 +6,17 @@ an LVGL display with threshold-based alerts and SD card logging.
 
 ## Repository Layout
 
-| Path | Description |
-|---|---|
-| `esp-data-hub-2/` | Data hub firmware — polls ECU/VDC over CAN, reads analog sensors, emits UART telemetry |
-| `esp32-data-display-2/` | Display firmware — receives UART telemetry, evaluates thresholds, renders LVGL UI |
-| `esp32-shared/` | Shared packet types and MessagePack/CRC16/COBS protocol codec |
-| `canhacker-usb-adapter/` | Utility firmware for USB CAN debugging |
-| `scripts/subaru-decode/` | Python: decode CANHacker traces using SSM address map |
-| `scripts/parse-foxwell-nt614/` | Python: parse Foxwell NT614 scan logs |
+| Path                           | Description                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------- |
+| `esp-data-hub-2/`              | Data hub firmware — polls ECU/VDC over CAN, reads analog sensors, emits UART telemetry |
+| `esp32-data-display-2/`        | Display firmware — receives UART telemetry, evaluates thresholds, renders LVGL UI      |
+| `esp32-shared/`                | Shared packet types and MessagePack/CRC16/COBS protocol codec                          |
+| `canhacker-usb-adapter/`       | Utility firmware for USB CAN debugging                                                 |
+| `scripts/subaru-decode/`       | Python: decode CANHacker traces using SSM address map                                  |
+| `scripts/parse-foxwell-nt614/` | Python: parse Foxwell NT614 scan logs                                                  |
 
 Deeper documentation lives in `docs/`:
+
 - [`docs/architecture.md`](docs/architecture.md) — data flow and component roles
 - [`docs/protocols.md`](docs/protocols.md) — CAN IDs, ISO-TP, SSM/UDS, UART wire format
 - [`docs/build.md`](docs/build.md) — build, flash, monitor, and mock/fake data modes
@@ -48,16 +49,27 @@ protocol documentation together. See [`docs/protocols.md`](docs/protocols.md).
 promptly — render and pipeline tasks run at different priorities.
 
 **Mock and fake data.** Use these sdkconfig options to test without hardware:
+
 - Hub: `CONFIG_DH_ANALOG_USE_MOCK=y` — replaces ADS1115 with stub readings
 - Display: `CONFIG_DD_ENABLE_FAKE_DATA=y` — generates synthetic sine-wave packets
 
 ## Critical Files
 
-| File | Why it matters |
-|---|---|
-| `esp32-shared/include/telemetry_types.h` | Defines `vehicle_state_t` — the wire format and shared vehicle state |
-| `esp32-shared/src/telemetry_protocol.c` | Owns MessagePack, CRC16, and COBS encoding/decoding |
-| `esp-data-hub-2/main/tasks/task_uart_emitter.c` | Snapshots state and emits shared-codec UART frames |
-| `esp32-data-display-2/main/car_data.c` | Accumulates UART bytes and passes complete frames to the shared codec |
-| `esp32-data-display-2/main/monitoring.c` | All alert thresholds live here |
-| `esp-data-hub-2/main/data_canbus/request_ecu.c` | SSM poll payload and response parsing |
+| File                                            | Why it matters                                                        |
+| ----------------------------------------------- | --------------------------------------------------------------------- |
+| `esp32-shared/include/telemetry_types.h`        | Defines `vehicle_state_t` — the wire format and shared vehicle state  |
+| `esp32-shared/src/telemetry_protocol.c`         | Owns MessagePack, CRC16, and COBS encoding/decoding                   |
+| `esp-data-hub-2/main/tasks/task_uart_emitter.c` | Snapshots state and emits shared-codec UART frames                    |
+| `esp32-data-display-2/main/car_data.c`          | Accumulates UART bytes and passes complete frames to the shared codec |
+| `esp32-data-display-2/main/monitoring.c`        | All alert thresholds live here                                        |
+| `esp-data-hub-2/main/data_canbus/request_ecu.c` | SSM poll payload and response parsing                                 |
+
+## Important implementation notes
+
+- `vehicle_state_t` is a wire-format contract. Its MessagePack array order,
+  schema version, codec limits, tests, and protocol documentation must be
+  updated together whenever telemetry changes.
+- The shared codec belongs in `esp32-shared`; do not create divergent hub and
+  display implementations.
+- State shared between acquisition, transport, monitoring, rendering, and
+  logging tasks is mutex-protected. Keep critical sections short.
