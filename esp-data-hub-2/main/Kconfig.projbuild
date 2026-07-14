@@ -1,5 +1,36 @@
 menu "DH Project Options"
 
+menu "RaceChrono BLE"
+
+config DH_RACECHRONO_BLE_ENABLED
+    bool "Enable RaceChrono DIY BLE telemetry"
+    default y
+    select BT_ENABLED
+    help
+        Advertise the RaceChrono DIY BLE CAN-Bus service and stream selected
+        vehicle_state values as synthetic CAN-style packets.
+
+if DH_RACECHRONO_BLE_ENABLED
+
+config DH_RACECHRONO_BLE_DEVICE_NAME
+    string "BLE device name"
+    default "PAIN-AND-SUFFERING"
+    help
+        Name shown while scanning for the RaceChrono DIY BLE device.
+
+config DH_RACECHRONO_BLE_EMIT_PERIOD_MS
+    int "Telemetry task period (ms)"
+    range 5 1000
+    default 20
+    help
+        How frequently the telemetry task snapshots vehicle_state. RaceChrono's
+        requested per-packet notification interval is applied in addition to
+        this upper rate limit.
+
+endif
+
+endmenu
+
 config DH_ENABLE_FAKE_DATA
     bool "Enable fake data generation"
     default y

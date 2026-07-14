@@ -19,15 +19,21 @@
 #include "tasks/task_analog_sensors.h"
 #include "tasks/task_can_rx_dispatcher.h"
 #include "tasks/task_ecu_ssm.h"
+#include "tasks/task_racechrono_ble.h"
 #include "tasks/task_twai_monitor.h"
 #include "tasks/task_uart_emitter.h"
 #include "tasks/task_vdc_uds.h"
+#include "racechrono_ble.h"
 
 static const char* TAG = "app_main";
 #define DH_UART_PORT ((uart_port_t)CONFIG_DH_UART_PORT)
 
 void app_main(void) {
   printf("Hello world!\n");
+
+#ifdef CONFIG_DH_RACECHRONO_BLE_ENABLED
+  bool racechrono_ble_ready = false;
+#endif
 
   twai_onchip_node_config_t node_config = {
       .io_cfg.tx = CONFIG_DH_TWAI_TX_GPIO,
@@ -74,6 +80,13 @@ void app_main(void) {
                                       &uart_queue, intr_alloc_flags));
 #endif
 
+#ifdef CONFIG_DH_RACECHRONO_BLE_ENABLED
+  racechrono_ble_ready = racechrono_ble_init();
+  if (!racechrono_ble_ready) {
+    ESP_LOGW(TAG, "RaceChrono BLE telemetry is unavailable");
+  }
+#endif
+
   if (xTaskCreate(task_ecu_ssm, "task_ecu_ssm", 8192 * 2, (void*)&app, tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
     ESP_LOGE(TAG, "Failed to create ECU SSM task");
     return;
@@ -87,5 +100,10 @@ void app_main(void) {
   xTaskCreate(task_twai_monitor, "task_twai_monitor", 4096, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
 #ifdef CONFIG_DH_UART_ENABLED
   xTaskCreate(task_uart_emitter, "task_uart_emitter", 8192, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
+#endif
+#ifdef CONFIG_DH_RACECHRONO_BLE_ENABLED
+  if (racechrono_ble_ready) {
+    xTaskCreate(task_racechrono_ble, "task_racechrono_ble", 4096, (void*)&app, tskIDLE_PRIORITY + 1, NULL);
+  }
 #endif
 }

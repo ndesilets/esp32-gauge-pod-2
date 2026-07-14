@@ -31,6 +31,11 @@ logs data to an SD card.
 │    Copy vehicle_state (under mutex)                │
 │    MessagePack → CRC16 → COBS → 0x00               │
 │    TX over UART at 115200 baud                     │
+│                                                    │
+│  task_racechrono_ble (prio+1)                      │
+│    Copy vehicle_state (under mutex)                │
+│    Pack synthetic RaceChrono packet 0x500          │
+│    Notify subscribed BLE client at requested rate  │
 └──────────────────────────┬─────────────────────────┘
                            │ UART (115200 baud, framed MessagePack)
                            ▼
@@ -67,6 +72,8 @@ Owns all vehicle data acquisition. Responsibilities:
 - Analog sensor reading via ADS1115 over I2C (oil temp, raw oil pressure)
 - Median plus adaptive exponential oil-pressure filtering; raw and filtered PSI are retained
 - Maintaining mutex-protected `vehicle_state_t` and emitting it as framed MessagePack over UART
+- Advertising RaceChrono's DIY BLE CAN-Bus service and streaming selected
+  `vehicle_state_t` fields as synthetic CAN-style packets
 
 Central state is `app_context_t` in `main/app_context.h`. All tasks receive a
 pointer to this; `vehicle_state` is protected by `vehicle_state_mutex`.
@@ -100,6 +107,7 @@ CRC16 validation, and COBS framing used by both firmware projects.
 | `task_analog_sensors` | hub | tskIDLE+1 | 8 KB |
 | `task_uart_emitter` | hub | tskIDLE+1 | 8 KB |
 | `task_twai_monitor` | hub | tskIDLE+1 | 4 KB |
+| `task_racechrono_ble` | hub | tskIDLE+1 | 4 KB |
 | `display_render_task` | display | tskIDLE+1 | 4 KB |
 
 ## Error Handling Convention
