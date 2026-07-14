@@ -91,6 +91,35 @@ Response payload begins with service ID 0xE8. Bytes after that:
 VDC parsing: `esp-data-hub-2/main/data_canbus/request_vdc.c` — produces
 `brake_pressure_bar` and `steering_angle_deg`.
 
+## RaceChrono DIY BLE Telemetry
+
+The data hub exposes RaceChrono's DIY BLE CAN-Bus service when
+`CONFIG_DH_RACECHRONO_BLE_ENABLED=y`. This is a BLE-only interface; it does not
+transmit the synthetic packet on the vehicle CAN bus and does not use ISO-TP.
+
+- Service UUID: `0x1FF8`
+- Main packet characteristic: `0x0001` (`READ`, `NOTIFY`)
+- Filter characteristic: `0x0002` (`WRITE`)
+- Synthetic packet ID: `0x00000500`
+
+RaceChrono writes its packet filter and requested notification interval to the
+filter characteristic. The hub sends notifications only after the packet is
+enabled and the central has subscribed to the main characteristic.
+
+The `0x500` packet ID is little-endian in the BLE packet header, as required by
+the RaceChrono DIY API. The four-byte payload is big-endian where applicable:
+
+| Payload byte(s) | Type | Vehicle state field | Units / conversion |
+|---|---|---|---|
+| `0` | `uint8` | `throttle_pos` | whole %, rounded and clamped to `0..100` |
+| `1` | `uint8` | `brake_pressure_bar` | whole bar, rounded and clamped to `0..120` |
+| `2:3` | signed `int16` | `steering_angle_deg` | whole degrees, rounded |
+
+In RaceChrono, enable **Expert settings → Experimental devices**, add a
+RaceChrono DIY BLE CAN-Bus device, then create three CAN-Bus channels for
+packet ID `0x500` that decode the listed byte ranges. The packet layout is implemented by
+`esp-data-hub-2/main/racechrono/racechrono_packet.c`.
+
 ## UART Telemetry (Hub → Display)
 
 - Baud: 115200, 8N1

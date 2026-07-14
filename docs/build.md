@@ -14,7 +14,7 @@ idf.py build
 idf.py -p PORT flash monitor    # replace PORT with e.g. COM3 or /dev/ttyUSB0
 ```
 
-**Target board:** ESP32 (original)
+**Target board:** ESP32-S3
 
 Default UART emit period: 33ms (~30 Hz)
 Default CAN poll period: 63ms (~16 Hz)
@@ -85,6 +85,9 @@ additional gauges.
 | `CONFIG_DH_UART_TX_GPIO` | 17 | UART TX GPIO |
 | `CONFIG_DH_UART_RX_GPIO` | 18 | UART RX GPIO |
 | `CONFIG_DH_UART_EMIT_PERIOD_MS` | 33 | Packet emit interval (ms) |
+| `CONFIG_DH_RACECHRONO_BLE_ENABLED` | y | Advertise the RaceChrono DIY BLE telemetry service |
+| `CONFIG_DH_RACECHRONO_BLE_DEVICE_NAME` | `Gauge Pod 2` | BLE advertising name shown to RaceChrono |
+| `CONFIG_DH_RACECHRONO_BLE_EMIT_PERIOD_MS` | 20 | Maximum BLE telemetry packet cadence (ms) |
 | `CONFIG_DH_ECU_POLL_PERIOD_MS` | 63 | ECU SSM poll interval (ms) |
 | `CONFIG_DH_VDC_POLL_PERIOD_MS` | 63 | VDC UDS poll interval (ms) |
 | `CONFIG_DH_ANALOG_POLL_PERIOD_MS` | 20 | Analog sensor poll interval (ms) |
