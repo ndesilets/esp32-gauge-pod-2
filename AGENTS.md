@@ -33,6 +33,27 @@ idf.py flash monitor
 
 See [`docs/build.md`](docs/build.md) for full details, port flags, and mock configs.
 
+## Host Tests
+
+When changing a tested source file, its header/API, or a contract it depends on,
+run the corresponding host test before considering the change complete. If the
+behavior is intentionally changing, update the test expectations and affected
+documentation in the same change. Do not weaken or delete assertions merely to
+make a regression pass.
+
+| Source area | Host test |
+| --- | --- |
+| `esp32-shared/src/telemetry_protocol.c` and telemetry wire types | `esp32-shared/test/test_telemetry_protocol.c` |
+| `esp-data-hub-2/main/data_analog/pressure_filter.c` | `esp-data-hub-2/test/test_pressure_filter.c` |
+| `esp-data-hub-2/main/racechrono/racechrono_packet.c` | `esp-data-hub-2/test/test_racechrono_packet.c` |
+| `esp-data-hub-2/main/data_canbus/isotp_codec.c` | `esp-data-hub-2/test/test_isotp_codec.c` |
+| `esp-data-hub-2/main/data_canbus/request_ecu.c` | `esp-data-hub-2/test/test_request_ecu.c` |
+| `esp32-data-display-2/main/monitoring.c` | `esp32-data-display-2/test/test_monitoring.c` |
+
+Run the individual C11 compile/test commands from the repository root. They are
+documented under **Development checks** in [`README.md`](README.md) and in each
+component's `test/README.md`.
+
 ## Key Conventions
 
 **MessagePack field order is a hard contract.** The shared codec encodes and

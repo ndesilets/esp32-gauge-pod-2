@@ -8,6 +8,7 @@
 
 #define RACECHRONO_PACKET_ID_VEHICLE_CONTROLS UINT32_C(0x500)
 #define RACECHRONO_PACKET_VEHICLE_CONTROLS_SIZE 4U
+#define RACECHRONO_BRAKE_PRESSURE_MAX_BAR 150U
 
 // Encodes the RaceChrono synthetic CAN packet 0x500 as:
 //   byte 0: throttle position, uint8 whole percent (0..100)

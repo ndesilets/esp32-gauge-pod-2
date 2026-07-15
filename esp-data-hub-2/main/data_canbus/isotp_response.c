@@ -1,7 +1,5 @@
 #include "isotp_response.h"
 
-#include <string.h>
-
 #include "can_types.h"
 #include "esp_log.h"
 #include "isotp.h"
@@ -37,13 +35,10 @@ bool isotp_collect_response(QueueHandle_t rx_queue, twai_node_handle_t node_hdl,
   }
 
   if ((first.data[0] & 0xF0) == ISOTP_SINGLE_FRAME) {
-    const size_t payload_len = first.data[0] & 0x0F;
-    if (payload_len > 7 || payload_len > out_payload_cap) {
-      ESP_LOGE(log_tag, "%s single-frame response is too large", label);
+    if (!isotp_unwrap_frames(&first, 1, out_payload, out_payload_cap, out_payload_len)) {
+      ESP_LOGE(log_tag, "Failed to unwrap ISO-TP single frame from %s", label);
       return false;
     }
-    memcpy(out_payload, &first.data[1], payload_len);
-    *out_payload_len = payload_len;
     return true;
   }
 

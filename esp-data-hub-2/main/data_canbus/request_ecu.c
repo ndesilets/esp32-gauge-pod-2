@@ -93,8 +93,8 @@ bool request_ecu_parse_ssm_response(const uint8_t* ssm_payload, size_t length, r
   response->inj_duty = ssm_ecu_parse_injector_duty(ssm_ecu_parse_injector_pw_ms(data[6]), response->engine_rpm);
   response->af_ratio = ssm_ecu_parse_afr(data[7]);
   response->dam = ssm_ecu_parse_dam(data[8]);
-  response->fb_knock =
-      ssm_ecu_parse_feedback_knock((uint32_t)(data[9] << 24 | data[10] << 16 | data[11] << 8 | data[12]));
+  response->fb_knock = ssm_ecu_parse_feedback_knock((uint32_t)data[9] << 24 | (uint32_t)data[10] << 16 |
+                                                    (uint32_t)data[11] << 8 | (uint32_t)data[12]);
   response->eth_conc = ssm_ecu_parse_ethanol_concentration((uint16_t)((data[13] << 8) | data[14]));
   response->throttle_pos = ssm_ecu_parse_throttle_pos(data[15]);
 

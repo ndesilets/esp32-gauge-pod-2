@@ -58,8 +58,8 @@ Subaru ECU / VDC ── CAN (500 kbps) ──> ESP32-S3 data hub <── analog 
 
 ## Build and flash
 
-Both primary firmware projects use ESP-IDF 5.5.1. v6 is a pain in the ass so far. Build each project from
-its own directory; the shared component is included automatically.
+Both primary firmware projects use ESP-IDF 5.5.1. Upgrading to v6 is not fun at the moment.
+Build each project from its own directory; the shared component is included automatically.
 
 ```powershell
 # ESP32-S3 data hub
@@ -81,8 +81,9 @@ options, see the [build guide](docs/build.md).
 
 ## Development checks
 
-The protocol codec and the data-hub oil-pressure/RaceChrono packet logic have
-small host-side C tests. Run them from the repository root with a C11 compiler:
+The telemetry and ISO-TP codecs, data-hub SSM/oil-pressure/RaceChrono logic,
+and display alert monitoring have small host-side C tests. Run them from the
+repository root with a C11 compiler:
 
 ```powershell
 gcc -std=c11 -Wall -Wextra -Werror -DMPACK_NODE=0 -DMPACK_BUILDER=0 `
@@ -101,12 +102,29 @@ gcc -std=c11 -Wall -Wextra -Werror -Iesp32-shared/include `
   esp-data-hub-2/main/racechrono/racechrono_packet.c `
   esp-data-hub-2/test/test_racechrono_packet.c -lm -o racechrono_packet_test
 .\racechrono_packet_test
+
+gcc -std=c11 -Wall -Wextra -Werror -Iesp-data-hub-2/main/data_canbus `
+  esp-data-hub-2/main/data_canbus/isotp_codec.c `
+  esp-data-hub-2/test/test_isotp_codec.c -o isotp_codec_test
+.\isotp_codec_test
+
+gcc -std=c11 -Wall -Wextra -Werror -Iesp-data-hub-2/main/data_canbus `
+  esp-data-hub-2/main/data_canbus/request_ecu.c `
+  esp-data-hub-2/test/test_request_ecu.c -lm -o request_ecu_test
+.\request_ecu_test
+
+gcc -std=c11 -Wall -Wextra -Werror -Iesp32-data-display-2/main `
+  esp32-data-display-2/main/monitoring.c `
+  esp32-data-display-2/test/test_monitoring.c -lm -o monitoring_test
+.\monitoring_test
 ```
 
 The same commands in POSIX shells use `\` for line continuation and `./` to
 run the generated executables.
 
 ## Documentation
+
+If you want to read some AI slop on how different parts of this work see the following:
 
 - [Architecture](docs/architecture.md) — component responsibilities, data flow, task priorities, and alerts.
 - [Protocols](docs/protocols.md) — CAN IDs, ISO-TP, SSM/UDS requests, UART framing, and telemetry schema.
