@@ -36,7 +36,7 @@ bool racechrono_packet_encode_vehicle_controls(const vehicle_state_t* state, uin
   }
 
   const uint8_t throttle_percent = clamp_u8(state->throttle_pos, 100U);
-  const uint8_t brake_pressure_bar = clamp_u8(state->brake_pressure_bar, 120U);
+  const uint8_t brake_pressure_bar = clamp_u8(state->brake_pressure_bar, RACECHRONO_BRAKE_PRESSURE_MAX_BAR);
   const uint16_t steering_angle_deg = (uint16_t)clamp_i16(state->steering_angle_deg);
 
   out[0] = throttle_percent;

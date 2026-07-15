@@ -19,6 +19,8 @@ static void test_encodes_whole_number_controls(void) {
 }
 
 static void test_clamps_and_rejects_invalid_arguments(void) {
+  assert(RACECHRONO_BRAKE_PRESSURE_MAX_BAR == 150U);
+
   vehicle_state_t state = {
       .throttle_pos = 250.0f,
       .brake_pressure_bar = 160.0f,
