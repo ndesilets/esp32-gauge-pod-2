@@ -6,35 +6,37 @@
 - Bitrate: 500 kbps
 - Interface: ESP-IDF TWAI driver (Two-Wire Automotive Interface)
 
-| Node | Request ID | Response ID |
-|---|---|---|
-| ECU (Subaru SSM) | 0x7E0 | 0x7E8 |
-| VDC / ABS module | 0x7B0 | 0x7B8 |
+| Node             | Request ID | Response ID |
+| ---------------- | ---------- | ----------- |
+| ECU (Subaru SSM) | 0x7E0      | 0x7E8       |
+| VDC / ABS module | 0x7B0      | 0x7B8       |
 
 ## ISO-TP (ISO 15765-2)
 
-Multi-byte ECU/VDC payloads are transported via ISO-TP. Implementation lives in
-`esp-data-hub-2/main/data_canbus/isotp.{c,h}`.
+Multi-byte ECU/VDC payloads are transported via ISO-TP. Hardware-independent
+segmentation and reassembly live in `esp-data-hub-2/main/data_canbus/isotp_codec.{c,h}`;
+flow control lives in `isotp.{c,h}`.
 
 Frame type bytes:
 
-| Constant | Value | Description |
-|---|---|---|
-| `ISOTP_SINGLE_FRAME` | 0x00 | Payload ≤7 bytes, single CAN frame |
-| `ISOTP_FIRST_FRAME` | 0x10 | Start of multi-frame, contains total length |
-| `ISOTP_CONSECUTIVE_FRAME` | 0x20 | Continuation frames |
-| `ISOTP_FLOW_CONTROL_FRAME` | 0x30 | Receiver sends back to authorize more frames |
+| Constant                   | Value | Description                                  |
+| -------------------------- | ----- | -------------------------------------------- |
+| `ISOTP_SINGLE_FRAME`       | 0x00  | Payload ≤7 bytes, single CAN frame           |
+| `ISOTP_FIRST_FRAME`        | 0x10  | Start of multi-frame, contains total length  |
+| `ISOTP_CONSECUTIVE_FRAME`  | 0x20  | Continuation frames                          |
+| `ISOTP_FLOW_CONTROL_FRAME` | 0x30  | Receiver sends back to authorize more frames |
 
 Flow control block size constants:
 
-| Constant | Value | Meaning |
-|---|---|---|
-| `ISOTP_FC_BS_LET_ER_EAT_BUD` | 0x00 | Send all remaining frames without pause |
-| `ISOTP_FC_BS_CONTINUE` | 0x01 | Continue sending |
-| `ISOTP_FC_BS_WAIT` | 0x02 | Wait for another FC |
-| `ISOTP_FC_BS_ABORT` | 0x03 | Abort transmission |
+| Constant                     | Value | Meaning                                 |
+| ---------------------------- | ----- | --------------------------------------- |
+| `ISOTP_FC_BS_LET_ER_EAT_BUD` | 0x00  | Send all remaining frames without pause |
+| `ISOTP_FC_BS_CONTINUE`       | 0x01  | Continue sending                        |
+| `ISOTP_FC_BS_WAIT`           | 0x02  | Wait for another FC                     |
+| `ISOTP_FC_BS_ABORT`          | 0x03  | Abort transmission                      |
 
 Key functions:
+
 - `isotp_wrap_payload()` — segments a byte payload into CAN frames for TX
 - `isotp_unwrap_frames()` — reassembles received CAN frames into a payload
 - `isotp_wait_for_fc()` — blocks (with timeout) until flow control frame arrives
@@ -74,19 +76,19 @@ Injector duty cycle is derived from injector #1 pulse width with
 
 Response payload begins with service ID 0xE8. Bytes after that:
 
-| Offset | Field | Conversion |
-|---|---|---|
-| data[0] | water_temp | `32 + 9 * (value - 40) / 5` → °F |
-| data[1] | af_correct | `(value - 128) * 100 / 128` → % |
-| data[2] | af_learned | `(value - 128) * 100 / 128` → % |
-| data[3:4] | engine_rpm | `(high << 8 | low) / 4` → RPM |
-| data[5] | int_temp | `32 + 9 * (value - 40) / 5` → °F |
-| data[6] | inj_duty | `(value * 0.256 ms) * RPM / 1200` → % |
-| data[7] | af_ratio | `value * 14.7 / 128` → λ ratio |
-| data[8] | dam | `value * 0.0625` → 0..1.049 |
-| data[9:12] | fb_knock | `memcpy float` from 4 bytes big-endian |
-| data[13:14] | eth_conc | `(high << 8 | low) * 100 / 65536` → % |
-| data[15] | throttle_pos | `value * 100 / 255` → % |
+| Offset      | Field        | Conversion                                  |
+| ----------- | ------------ | ------------------------------------------- |
+| data[0]     | water_temp   | `32 + 9 * (value - 40) / 5` → °F            |
+| data[1]     | af_correct   | `(value - 128) * 100 / 128` → %             |
+| data[2]     | af_learned   | `(value - 128) * 100 / 128` → %             |
+| data[3:4]   | engine_rpm   | `(high << 8 \| low) / 4` → RPM              |
+| data[5]     | int_temp     | `32 + 9 * (value - 40) / 5` → °F            |
+| data[6]     | inj_duty     | `(value * 0.256 ms) * RPM / 1200` → %       |
+| data[7]     | af_ratio     | `value * 14.7 / 128` → λ ratio              |
+| data[8]     | dam          | `value * 0.0625` → 0..1.049                 |
+| data[9:12]  | fb_knock     | `memcpy float` from 4 bytes big-endian      |
+| data[13:14] | eth_conc     | `(high << 8 \| low) * 100 / 65536` → %      |
+| data[15]    | throttle_pos | `value * 100 / 255` → %                     |
 
 VDC parsing: `esp-data-hub-2/main/data_canbus/request_vdc.c` — produces
 `brake_pressure_bar` and `steering_angle_deg`.
@@ -109,11 +111,11 @@ enabled and the central has subscribed to the main characteristic.
 The `0x500` packet ID is little-endian in the BLE packet header, as required by
 the RaceChrono DIY API. The four-byte payload is big-endian where applicable:
 
-| Payload byte(s) | Type | Vehicle state field | Units / conversion |
-|---|---|---|---|
-| `0` | `uint8` | `throttle_pos` | whole %, rounded and clamped to `0..100` |
-| `1` | `uint8` | `brake_pressure_bar` | whole bar, rounded and clamped to `0..120` |
-| `2:3` | signed `int16` | `steering_angle_deg` | whole degrees, rounded |
+| Payload byte(s) | Type           | Vehicle state field  | Units / conversion                         |
+| --------------- | -------------- | -------------------- | ------------------------------------------ |
+| `0`             | `uint8`        | `throttle_pos`       | whole %, rounded and clamped to `0..100`   |
+| `1`             | `uint8`        | `brake_pressure_bar` | whole bar, rounded and clamped to `0..150` |
+| `2:3`           | signed `int16` | `steering_angle_deg` | whole degrees, rounded                     |
 
 In RaceChrono, enable **Expert settings → Experimental devices**, add a
 RaceChrono DIY BLE CAN-Bus device, then create three CAN-Bus channels for
